@@ -64,6 +64,9 @@
                     </td>
                 </tr>
             </table>
+            {% if form.captcha %}
+                <div style="margin-top: 0.5em">{{ form.captcha }}</div>
+            {% endif %}
             <hr>
 		<a href="{{ url('password_reset') }}" style="padding-right: 1em;">{{ _('Forgot your password?') }}</a>
             <button style="float:right;" type="submit">

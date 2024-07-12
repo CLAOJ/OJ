@@ -315,6 +315,7 @@ INSTALLED_APPS += (
     "impersonate",
     "django_jinja",
     "martor",
+    "turnstile",
     "adminsortable2",
 )
 
@@ -705,6 +706,9 @@ SOCIAL_AUTH_SLUGIFY_USERNAMES = True
 SOCIAL_AUTH_SLUGIFY_FUNCTION = "judge.social_auth.slugify_username"
 
 MOSS_API_KEY = None
+
+TURNSTILE_SITEKEY = None
+TURNSTILE_SECRET = None
 
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 

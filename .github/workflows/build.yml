@@ -50,6 +50,6 @@ jobs:
         with:
           node-version: '14'
       - name: Install npm packages
-        run: npm install -g sass postcss-cli postcss autoprefixer
+        run: npm install -g sass postcss-cli@10.1.0 postcss autoprefixer
       - name: Build style.css
         run: ./make_style.sh

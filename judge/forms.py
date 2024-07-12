@@ -22,6 +22,7 @@ from django.utils.translation import gettext_lazy as _, ngettext_lazy
 from django_ace import AceWidget
 from judge.models import BlogPost, Contest, ContestAnnouncement, ContestProblem, Language, LanguageLimit, \
     Organization, Problem, Profile, Solution, Submission, WebAuthnCredential
+from judge.utils.captcha import TurnstileField
 from judge.utils.subscription import newsletter_id
 from judge.widgets import HeavyPreviewPageDownWidget, HeavySelect2MultipleWidget, HeavySelect2Widget, MartorWidget, \
     Select2MultipleWidget, Select2Widget
@@ -353,6 +354,9 @@ class OrganizationForm(ModelForm):
 
 
 class CustomAuthenticationForm(AuthenticationForm):
+    if TurnstileField is not None:
+        captcha = TurnstileField()
+
     def __init__(self, *args, **kwargs):
         super(CustomAuthenticationForm, self).__init__(*args, **kwargs)
         self.fields['username'].widget.attrs.update({'placeholder': _('Username')})
