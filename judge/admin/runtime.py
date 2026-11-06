@@ -87,7 +87,8 @@ class JudgeAdmin(VersionAdmin):
 
     def get_urls(self):
         return ([path('<int:id>/disconnect/', self.disconnect_view, name='judge_judge_disconnect'),
-                 path('<int:id>/terminate/', self.terminate_view, name='judge_judge_terminate')] +
+                 path('<int:id>/terminate/', self.terminate_view, name='judge_judge_terminate'),
+                 path('<int:id>/disable/', self.disable_view, name='judge_judge_disable')] +
                 super(JudgeAdmin, self).get_urls())
 
     def disconnect_judge(self, id, force=False):
