@@ -458,14 +458,14 @@ a.close {
     background: $color_primary75;
     border-radius: $widget_border_radius $widget_border_radius 0 0;
     border-bottom: 1px solid $color_primary25;
-    color: $color_header_text;
+    color: $color_primary0;
     padding: 10px 12px;
     font-weight: 600;
     font-size: 1.3em;
 }
 
 .sidebox h3 .fa, .sidebox h3 .fa-solid {
-    color: $color_header_text;
+    color: $color_primary0;
     float: left;
     margin: 0.1em 0.4em 0 0;
 }
