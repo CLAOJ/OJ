@@ -364,6 +364,133 @@
         </span>
     </footer>
 </div>
+<style>
+    /* Styling for the popup container */
+    .qr-popup-container {
+		display: none; /* Add this line to prevent the flash */
+        position: fixed;
+        bottom: 20px;  /* Distance from the bottom */
+        right: 20px;   /* CHANGED: Distance from the right */
+        width: 160px;
+        background-color: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999; /* Ensures it stays on top of DMOJ content */
+        font-family: inherit;
+        overflow: hidden;
+        transition: width 0.3s ease;
+    }
+
+    /* Styling for when the widget is minimized */
+    .qr-popup-container.minimized {
+        width: 120px;
+    }
+
+    /* Header containing title and buttons */
+    .qr-popup-header {
+        background-color: #f8f9fa;
+        padding: 8px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .qr-popup-header span {
+        font-size: 13px;
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* Control buttons (Minimize and Close) */
+    .qr-controls button {
+        background: none;
+        border: none;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 0 4px;
+        color: #6c757d;
+        line-height: 1;
+    }
+
+    .qr-controls button:hover {
+        color: #212529;
+    }
+
+    /* Body containing the actual image */
+    #qr-popup-body {
+        padding: 10px;
+        text-align: center;
+        background: #fff;
+    }
+
+    #qr-popup-body img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+    }
+</style>
+<div id="qr-popup-widget" class="qr-popup-container">
+    <div class="qr-popup-header">
+        <span id="qr-title">Hỗ Trợ CLAOJ</span>
+        <div class="qr-controls">
+            <button id="qr-minimize-btn" title="Minimize">−</button>
+            <button id="qr-close-btn" title="Close">×</button>
+        </div>
+    </div>
+    <div id="qr-popup-body">
+	<a href="https://quy.momo.vn/v2/MsvmMoip7r?e14fe" target="_blank">
+        <img src="{{ static('qr.png') }}" alt="QR Code">
+    </a>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const qrWidget = document.getElementById('qr-popup-widget');
+        const minimizeBtn = document.getElementById('qr-minimize-btn');
+        const closeBtn = document.getElementById('qr-close-btn');
+        const body = document.getElementById('qr-popup-body');
+		
+		const DAYS_TO_WAIT = 1; 
+
+        // 1. Check if the popup should be shown
+        const hideUntil = localStorage.getItem('qrWidgetClosed');
+        const now = new Date().getTime();
+        // Check LocalStorage: If the user closed it previously, keep it hidden
+		if (!hideUntil || now >= parseInt(hideUntil)) {
+            qrWidget.style.display = 'block';
+        }
+
+        // Minimize / Maximize Logic
+        minimizeBtn.addEventListener('click', function() {
+            if (body.style.display === 'none') {
+                // Expand
+                body.style.display = 'block';
+                qrWidget.classList.remove('minimized');
+                minimizeBtn.textContent = '−';
+                minimizeBtn.title = 'Minimize';
+            } else {
+                // Minimize
+                body.style.display = 'none';
+                qrWidget.classList.add('minimized');
+                minimizeBtn.textContent = '+';
+                minimizeBtn.title = 'Expand';
+            }
+        });
+
+        // Close Logic
+        closeBtn.addEventListener('click', function() {
+            qrWidget.style.display = 'none';
+			// Calculate expiry time: Current time + (days * hours * minutes * seconds * milliseconds)
+            const expiryTime = new Date().getTime() + (DAYS_TO_WAIT * 24 * 60 * 60 * 1000);
+            
+            // Save the timestamp to localStorage
+            localStorage.setItem('qrWidgetClosed', expiryTime);
+        });
+    });
+</script>
 </body>
 <!-- <script type="text/javascript" src="/static/tet.js"></script> -->
 </html>
