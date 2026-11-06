@@ -298,7 +298,7 @@ urlpatterns = [
 
     path('post/', include([
         path('', paged_list_view(blog.PostList, 'blog_post_list')),
-        path('<int:id>-<slug:slug>/', include([
+        path('<int:id>-<str:slug>/', include([
             path('', blog.PostView.as_view(), name='blog_post'),
             path('edit', blog.BlogPostEdit.as_view(), name='blog_post_edit'),
         ])),
