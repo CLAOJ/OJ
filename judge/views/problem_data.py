@@ -232,7 +232,7 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
             context['data_form'] = self.get_data_form()
             try:
                 valid_files = self.get_valid_files(context['data_form'].instance)
-            except BadZipfile:
+            except (BadZipfile, OSError):
                 pass
         context['valid_files'] = set(valid_files)
         context['valid_files_json'] = mark_safe(json.dumps(valid_files))
@@ -247,7 +247,7 @@ class ProblemDataView(TitleMixin, ProblemManagerMixin):
         try:
             valid_files = self.get_valid_files(data_form.instance, post=True)
             data_form.zip_valid = True
-        except BadZipfile:
+        except (BadZipfile, OSError):
             valid_files = []
             data_form.zip_valid = False
 
