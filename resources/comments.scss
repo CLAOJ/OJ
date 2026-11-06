@@ -1,4 +1,4 @@
-@import "vars";
+@use "vars" as *;
 
 .comment-score {
     font-weight: bold;
@@ -87,6 +87,10 @@ a {
         // Hack for 4k on Chrome
         font-size: $base_font_size;
     }
+}
+
+.comment-edit-form {
+    min-width: 60em;
 }
 
 .comment {

@@ -1,5 +1,6 @@
 import errno
 import json
+from enum import IntEnum
 from operator import attrgetter
 
 from django.conf import settings
@@ -8,7 +9,7 @@ from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models, transaction
-from django.db.models import CASCADE, F, FilteredRelation, Q, SET_NULL
+from django.db.models import CASCADE, Exists, F, FilteredRelation, OuterRef, Q, SET_NULL
 from django.db.models.functions import Coalesce
 from django.urls import reverse
 from django.utils import timezone
@@ -102,6 +103,18 @@ class ProblemTestcaseAccess:
     AUTHOR_ONLY = 'O'
 
 
+class VotePermission(IntEnum):
+    NONE = 0
+    VIEW = 1
+    VOTE = 2
+
+    def can_view(self):
+        return self >= VotePermission.VIEW
+
+    def can_vote(self):
+        return self >= VotePermission.VOTE
+
+
 class Problem(models.Model):
     SUBMISSION_SOURCE_ACCESS = (
         (SubmissionSourceAccess.FOLLOW, _('Follow global setting')),
@@ -122,7 +135,8 @@ class Problem(models.Model):
                                         'used in the url after /problem/'))
     name = models.CharField(max_length=100, verbose_name=_('problem name'), db_index=True,
                             help_text=_('The full name of the problem, '
-                                        'as shown in the problem list.'))
+                                        'as shown in the problem list.'),
+                            validators=[disallowed_characters_validator])
     source = models.CharField(max_length=200, verbose_name=_('Problem source'), db_index=True, blank=True,
                               help_text=_('Source of problem. Please credit the source of the problem'
                                           'if it is not yours'))
@@ -235,6 +249,8 @@ class Problem(models.Model):
             return True
         if user.profile.id in self.editor_ids:
             return True
+        if self.is_organization_private and self.organizations.filter(admins=user.profile).exists():
+            return True
         return False
 
     def is_accessible_by(self, user, skip_contest_problem_check=False):
@@ -330,18 +346,37 @@ class Problem(models.Model):
             q = Q(is_public=True)
             if not (user.has_perm('judge.see_organization_problem') or edit_public_problem):
                 # Either not organization private or in the organization.
-                q &= (
-                    Q(is_organization_private=False) |
-                    Q(is_organization_private=True, organizations__in=user.profile.organizations.all())
+                q &= Q(is_organization_private=False) | cls.organization_filter_q(
+                    # Avoids needlessly joining Organization
+                    Profile.organizations.through.objects.filter(profile=user.profile).values('organization_id'),
                 )
 
-            # Authors, curators, and testers should always have access, so OR at the very end.
-            q |= Q(authors=user.profile)
-            q |= Q(curators=user.profile)
-            q |= Q(testers=user.profile)
+            if edit_own_problem:
+                q |= cls.organization_filter_q(
+                    # Avoids needlessly joining Organization
+                    Organization.admins.through.objects.filter(profile=user.profile).values('organization_id'),
+                )
+
+            # Authors, curators, and testers should always have access.
+            q = cls.q_add_author_curator_tester(q, user.profile)
             queryset = queryset.filter(q)
 
         return queryset
+
+    @classmethod
+    def q_add_author_curator_tester(cls, q, profile):
+        # This is way faster than the obvious |= Q(authors=profile) et al. because we are not doing
+        # joins and forcing the user to clean it up with .distinct().
+        q |= Exists(Problem.authors.through.objects.filter(problem=OuterRef('pk'), profile=profile))
+        q |= Exists(Problem.curators.through.objects.filter(problem=OuterRef('pk'), profile=profile))
+        q |= Exists(Problem.testers.through.objects.filter(problem=OuterRef('pk'), profile=profile))
+        return q
+
+    @classmethod
+    def organization_filter_q(cls, queryset):
+        q = Q(is_organization_private=True)
+        q &= Exists(Problem.organizations.through.objects.filter(problem=OuterRef('pk'), organization__in=queryset))
+        return q
 
     @classmethod
     def get_public_problems(cls):
@@ -355,6 +390,7 @@ class Problem(models.Model):
             return cls.objects.all()
 
         q = Q(authors=user.profile) | Q(curators=user.profile)
+        q |= Q(is_organization_private=True, organizations__in=user.profile.admin_of.all())
 
         if user.has_perm('judge.edit_public_problem'):
             q |= Q(is_public=True)
@@ -428,8 +464,8 @@ class Problem(models.Model):
         return self.submission_source_visibility_mode
 
     def update_stats(self):
-        all_queryset = self.submission_set.filter(user__is_unlisted=False)
-        ac_queryset = all_queryset.filter(points__gte=self.points, result='AC')
+        all_queryset = self.submission_set.filter(user__is_unlisted=False, is_archived=False)
+        ac_queryset = all_queryset.filter(result='AC', case_points__gte=F('case_total'))
         self.user_count = ac_queryset.values('user').distinct().count()
         submissions = all_queryset.count()
         if submissions:
@@ -551,6 +587,33 @@ class Problem(models.Model):
         from judge.tasks import rescore_problem
         transaction.on_commit(rescore_problem.s(self.id, False).delay)
 
+    def is_solved_by(self, user):
+        # Return true if a full AC submission to the problem from the user exists.
+        return self.submission_set.filter(
+            user=user.profile, is_archived=False, result='AC', case_points__gte=F('case_total')).exists()
+
+    def vote_permission_for_user(self, user):
+        if not user.is_authenticated:
+            return VotePermission.NONE
+
+        # If the user is in contest, nothing should be shown.
+        if user.profile.current_contest:
+            return VotePermission.NONE
+
+        # If the user is not allowed to vote.
+        if user.profile.is_unlisted or user.profile.is_banned_from_problem_voting:
+            return VotePermission.VIEW
+
+        # If the user is banned from submitting to the problem.
+        if self.banned_users.filter(pk=user.pk).exists():
+            return VotePermission.VIEW
+
+        # If the user has not solved the problem.
+        if not self.is_solved_by(user):
+            return VotePermission.VIEW
+
+        return VotePermission.VOTE
+
     class Meta:
         permissions = (
             ('see_private_problem', _('See hidden problems')),
@@ -565,9 +628,35 @@ class Problem(models.Model):
             ('change_public_visibility', _('Change is_public field')),
             ('change_manually_managed', _('Change is_manually_managed field')),
             ('see_organization_problem', _('See organization-private problems')),
+            ('create_private_problem', _('Create private problems')),
         )
         verbose_name = _('problem')
         verbose_name_plural = _('problems')
+
+
+class ProblemPointsVote(models.Model):
+    points = models.IntegerField(
+        verbose_name=_('proposed points'),
+        help_text=_('The amount of points the voter thinks this problem deserves.'),
+        validators=[
+            MinValueValidator(settings.DMOJ_PROBLEM_MIN_USER_POINTS_VOTE),
+            MaxValueValidator(settings.DMOJ_PROBLEM_MAX_USER_POINTS_VOTE),
+        ],
+    )
+    voter = models.ForeignKey(Profile, verbose_name=_('voter'), related_name='problem_points_votes', on_delete=CASCADE)
+    problem = models.ForeignKey(Problem, verbose_name=_('problem'), related_name='problem_points_votes',
+                                on_delete=CASCADE)
+    vote_time = models.DateTimeField(verbose_name=_('vote time'), help_text=_('The time this vote was cast.'),
+                                     auto_now_add=True)
+    note = models.TextField(verbose_name=_('note'), help_text=_('Justification for problem point value.'),
+                            max_length=8192, blank=True, default='')
+
+    class Meta:
+        verbose_name = _('problem vote')
+        verbose_name_plural = _('problem votes')
+
+    def __str__(self):
+        return _('Points vote by %(voter)s for %(problem)s') % {'voter': self.voter, 'problem': self.problem}
 
 
 class ProblemTranslation(models.Model):

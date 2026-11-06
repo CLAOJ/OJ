@@ -64,16 +64,17 @@ class Submission(models.Model):
         'AB': _('Aborted'),
     }
 
-    user = models.ForeignKey(Profile, on_delete=models.CASCADE)
-    problem = models.ForeignKey(Problem, on_delete=models.CASCADE)
+    user = models.ForeignKey(Profile, verbose_name=_('user'), on_delete=models.CASCADE, db_index=False)
+    problem = models.ForeignKey(Problem, verbose_name=_('problem'), on_delete=models.CASCADE, db_index=False)
     date = models.DateTimeField(verbose_name=_('submission time'), auto_now_add=True, db_index=True)
-    time = models.FloatField(verbose_name=_('execution time'), null=True, db_index=True)
+    time = models.FloatField(verbose_name=_('execution time'), null=True)
     memory = models.FloatField(verbose_name=_('memory usage'), null=True)
-    points = models.FloatField(verbose_name=_('points granted'), null=True, db_index=True)
-    language = models.ForeignKey(Language, verbose_name=_('submission language'), on_delete=models.CASCADE)
+    points = models.FloatField(verbose_name=_('points granted'), null=True)
+    language = models.ForeignKey(Language, verbose_name=_('submission language'),
+                                 on_delete=models.CASCADE, db_index=False)
     status = models.CharField(verbose_name=_('status'), max_length=2, choices=STATUS, default='QU', db_index=True)
     result = models.CharField(verbose_name=_('result'), max_length=3, choices=SUBMISSION_RESULT,
-                              default=None, null=True, blank=True, db_index=True)
+                              default=None, null=True, blank=True)
     error = models.TextField(verbose_name=_('compile errors'), null=True, blank=True)
     current_testcase = models.IntegerField(default=0)
     batch = models.BooleanField(verbose_name=_('batched cases'), default=False)
@@ -85,8 +86,9 @@ class Submission(models.Model):
     rejudged_date = models.DateTimeField(verbose_name=_('last rejudge date by admin'), null=True, blank=True)
     is_pretested = models.BooleanField(verbose_name=_('was ran on pretests only'), default=False)
     contest_object = models.ForeignKey('Contest', verbose_name=_('contest'), null=True, blank=True,
-                                       on_delete=models.SET_NULL, related_name='+')
+                                       on_delete=models.SET_NULL, related_name='+', db_index=False)
     locked_after = models.DateTimeField(verbose_name=_('submission lock'), null=True, blank=True)
+    is_archived = models.BooleanField(verbose_name=_('is archived'), default=False)
 
     @classmethod
     def result_class_from_code(cls, result, case_points, case_total):
@@ -130,6 +132,12 @@ class Submission(models.Model):
             judge_submission(self, *args, rejudge=rejudge, **kwargs)
 
     judge.alters_data = True
+
+    def archive(self):
+        self.is_archived = True
+        self.save(update_fields=['is_archived'])
+
+    archive.alters_data = True
 
     def abort(self):
         abort_submission(self)
@@ -225,9 +233,36 @@ class Submission(models.Model):
             ('view_all_submission', _('View all submission')),
             ('resubmit_other', _("Resubmit others' submission")),
             ('lock_submission', _('Change lock status of submission')),
+            ('archive_submission', _('Archive any submission')),
         )
         verbose_name = _('submission')
         verbose_name_plural = _('submissions')
+
+        indexes = [
+            # For problem submission rankings
+            models.Index(fields=['problem', 'user', '-points', '-time']),
+
+            # For contest problem submission rankings
+            models.Index(fields=['contest_object', 'problem', 'user', '-points', '-time']),
+
+            # For main submission list filtering by some combination of result and language
+            models.Index(fields=['result', '-id']),
+            models.Index(fields=['result', 'language', '-id']),
+            models.Index(fields=['language', '-id']),
+
+            # For filtered main submission list result charts
+            models.Index(fields=['result', 'problem']),
+            models.Index(fields=['language', 'problem', 'result']),
+
+            # For problem submissions result chart
+            models.Index(fields=['problem', 'result']),
+
+            # For user_attempted_ids and own problem submissions result chart
+            models.Index(fields=['user', 'problem', 'result']),
+
+            # For user_completed_ids
+            models.Index(fields=['user', 'result']),
+        ]
 
 
 class SubmissionSource(models.Model):
@@ -243,7 +278,7 @@ class SubmissionSource(models.Model):
 class SubmissionTestCase(models.Model):
     RESULT = SUBMISSION_RESULT
 
-    submission = models.ForeignKey(Submission, verbose_name=_('associated submission'),
+    submission = models.ForeignKey(Submission, verbose_name=_('associated submission'), db_index=False,
                                    related_name='test_cases', on_delete=models.CASCADE)
     case = models.IntegerField(verbose_name=_('test case ID'))
     status = models.CharField(max_length=3, verbose_name=_('status flag'), choices=SUBMISSION_RESULT)

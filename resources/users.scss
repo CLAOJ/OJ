@@ -1,4 +1,4 @@
-@import "vars";
+@use "vars" as *;
 
 #content-left {
     &.users {
@@ -25,17 +25,32 @@ td.rating {
     height: 2.3em;
 }
 
+#content-left {
+    &.users {
+        flex: unset;
+	padding: 0;
+    }
+}
+
+td.user-name, td.personal-info, td.organization-name {
+    padding-left: 1em;
+    text-align: left;
+}
+
 .auth-flow-form {
 	input {
 		margin: 0.75em 0 0 0;
 	}
 }
 
-.user-search-image, .user-search-name {
+.user-search-image {
     vertical-align: middle;
+    border-radius: 4px;
 }
 
+
 .user-search-name {
+    vertical-align: middle;
     padding-left: 0.5em;
 }
 
@@ -126,7 +141,7 @@ td.rating {
 
 img.user-gravatar {
     display: block;
-    border-radius: 6px;
+    border-radius: 4px;
     background-color: white;
 }
 

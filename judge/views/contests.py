@@ -1,7 +1,8 @@
+import datetime
 import json
 from calendar import Calendar, SUNDAY
 from collections import defaultdict, namedtuple
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from functools import partial
 from operator import attrgetter, itemgetter
 
@@ -13,9 +14,9 @@ from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist, PermissionDenied
 from django.db import IntegrityError
 from django.db.models import BooleanField, Case, Count, F, FloatField, IntegerField, Max, Min, Q, Sum, Value, When
-from django.db.models.expressions import CombinedExpression
+from django.db.models.expressions import CombinedExpression, Exists, OuterRef
 from django.db.models.query import Prefetch
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.template import loader
 from django.template.defaultfilters import date as date_filter
@@ -26,9 +27,11 @@ from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
 from django.utils.timezone import make_aware
 from django.utils.translation import gettext as _, gettext_lazy
-from django.views.generic import ListView, TemplateView
-from django.views.generic.detail import BaseDetailView, DetailView, SingleObjectMixin, View
+from django.views.generic import ListView, TemplateView, View
+from django.views.generic.detail import BaseDetailView, DetailView, SingleObjectMixin
 from django.views.generic.edit import CreateView, UpdateView
+from django.views.generic.list import BaseListView
+from icalendar import Calendar as ICalendar, Event
 from reversion import revisions
 
 from judge.comments import CommentedDetailView
@@ -99,16 +102,40 @@ class ContestList(QueryStringSortMixin, DiggPaginatorMixin, TitleMixin, ContestL
         return timezone.now()
 
     def _get_queryset(self):
-        return super().get_queryset().prefetch_related('tags', 'organizations', 'authors', 'curators', 'testers')
+        queryset = super().get_queryset().prefetch_related(
+            'tags',
+            'organizations',
+            'authors',
+            'curators',
+            'testers',
+            'spectators',
+            'classes',
+        )
+
+        profile = self.request.profile
+        if not profile:
+            return queryset
+
+        return queryset.annotate(
+            editor_or_tester=Exists(Contest.authors.through.objects.filter(contest=OuterRef('pk'), profile=profile)) |
+            Exists(Contest.curators.through.objects.filter(contest=OuterRef('pk'), profile=profile)) |
+            Exists(Contest.testers.through.objects.filter(contest=OuterRef('pk'), profile=profile)),
+            completed_contest=Exists(ContestParticipation.objects.filter(contest=OuterRef('pk'), user=profile,
+                                                                         virtual=ContestParticipation.LIVE)),
+        )
 
     def get_queryset(self):
         self.search_query = None
-        query_set = self._get_queryset().order_by(self.order, 'key').filter(end_time__lt=self._now)
+        queryset = self._get_queryset().order_by(self.order, 'key').filter(end_time__lt=self._now)
         if 'search' in self.request.GET:
             self.search_query = search_query = ' '.join(self.request.GET.getlist('search')).strip()
             if search_query:
-                query_set = query_set.filter(Q(key__icontains=search_query) | Q(name__icontains=search_query))
-        return query_set
+                queryset = queryset.filter(Q(key__icontains=search_query) | Q(name__icontains=search_query))
+        return queryset
+
+    def get_paginator(self, queryset, per_page, orphans=0, allow_empty_first_page=True, **kwargs):
+        return super().get_paginator(queryset, per_page, orphans, allow_empty_first_page,
+                                     count=self.get_queryset().values('id').count(), **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super(ContestList, self).get_context_data(**kwargs)
@@ -302,8 +329,16 @@ class ContestDetail(ContestMixin, TitleMixin, CommentedDetailView):
         context['metadata'].update(
             **self.object.contest_problems
             .annotate(
-                partials_enabled=F('partial').bitand(F('problem__partial')),
-                pretests_enabled=F('is_pretested').bitand(F('contest__run_pretests_only')),
+                partials_enabled=Case(
+                    When(partial=True, problem__partial=True, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                ),
+                pretests_enabled=Case(
+                    When(is_pretested=True, contest__run_pretests_only=True, then=Value(True)),
+                    default=Value(False),
+                    output_field=BooleanField(),
+                ),
             )
             .aggregate(
                 has_partials=Sum('partials_enabled'),
@@ -312,7 +347,6 @@ class ContestDetail(ContestMixin, TitleMixin, CommentedDetailView):
                 problem_count=Count('id'),
             ),
         )
-
         clarifications = ProblemClarification.objects.filter(problem__in=self.object.problems.all())
         context['has_clarifications'] = clarifications.count() > 0
         context['clarifications'] = clarifications.order_by('-date')
@@ -326,6 +360,8 @@ class ContestDetail(ContestMixin, TitleMixin, CommentedDetailView):
         context['completed_problem_ids'] = user_completed_ids(self.request.profile) if authenticated else []
         context['attempted_problem_ids'] = user_attempted_ids(self.request.profile) if authenticated else []
 
+        context['enable_comments'] = settings.DMOJ_ENABLE_COMMENTS
+        context['enable_social'] = settings.DMOJ_ENABLE_SOCIAL
         return context
 
 
@@ -551,8 +587,8 @@ class ContestCalendar(TitleMixin, ContestListMixin, TemplateView):
 
     def get_table(self):
         calendar = Calendar(self.firstweekday).monthdatescalendar(self.year, self.month)
-        starts, ends, oneday = self.get_contest_data(make_aware(datetime.combine(calendar[0][0], time.min)),
-                                                     make_aware(datetime.combine(calendar[-1][-1], time.min)))
+        starts, ends, oneday = self.get_contest_data(make_aware(datetime.datetime.combine(calendar[0][0], time.min)),
+                                                     make_aware(datetime.datetime.combine(calendar[-1][-1], time.min)))
         return [[ContestDay(
             date=date, is_pad=date.month != self.month,
             is_today=date == self.today, starts=starts[date], ends=ends[date], oneday=oneday[date],
@@ -595,6 +631,29 @@ class ContestCalendar(TitleMixin, ContestListMixin, TemplateView):
         else:
             context['next_month'] = None
         return context
+
+
+class ContestICal(TitleMixin, ContestListMixin, BaseListView):
+    def generate_ical(self):
+        cal = ICalendar()
+        cal.add('prodid', '-//DMOJ//NONSGML Contests Calendar//')
+        cal.add('version', '2.0')
+
+        now = timezone.now().astimezone(datetime.timezone.utc)
+        domain = self.request.get_host()
+        for contest in self.get_queryset():
+            event = Event()
+            event.add('uid', f'contest-{contest.key}@{domain}')
+            event.add('summary', contest.name)
+            event.add('location', self.request.build_absolute_uri(contest.get_absolute_url()))
+            event.add('dtstart', contest.start_time.astimezone(datetime.timezone.utc))
+            event.add('dtend', contest.end_time.astimezone(datetime.timezone.utc))
+            event.add('dtstamp', now)
+            cal.add_component(event)
+        return cal.to_ical()
+
+    def render_to_response(self, context, **kwargs):
+        return HttpResponse(self.generate_ical(), content_type='text/calendar')
 
 
 class ContestStats(TitleMixin, ContestMixin, DetailView):
@@ -707,7 +766,10 @@ def base_contest_ranking_list(contest, problems, queryset):
 
 
 def contest_ranking_list(contest, problems):
-    return base_contest_ranking_list(contest, problems, base_contest_ranking_queryset(contest))
+    return base_contest_ranking_list(contest, problems, contest.users.filter(virtual=0)
+                                     .prefetch_related('user__organizations')
+                                     .annotate(submission_cnt=Count('submission'))
+                                     .order_by('is_disqualified', '-score', 'cumtime', 'tiebreaker', '-submission_cnt'))
 
 
 def get_contest_ranking_list(request, contest, participation=None, ranking_list=contest_ranking_list, ranker=ranker):

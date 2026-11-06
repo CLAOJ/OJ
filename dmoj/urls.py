@@ -6,13 +6,11 @@ from django.http import Http404, HttpResponsePermanentRedirect
 from django.templatetags.static import static
 from django.urls import include, path, re_path, reverse
 from django.utils.functional import lazy
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from django.views.generic import RedirectView
-from martor.views import markdown_search_user
 
 from judge.feed import AtomBlogFeed, AtomCommentFeed, AtomProblemFeed, BlogFeed, CommentFeed, ProblemFeed
-from judge.sitemap import BlogPostSitemap, ContestSitemap, HomePageSitemap, OrganizationSitemap, ProblemSitemap, \
-    SolutionSitemap, UrlSitemap, UserSitemap
+from judge.sitemap import sitemaps
 from judge.views import TitledTemplateView, api, blog, comment, contests, language, license, mailgun, organization, \
     preview, problem, problem_manage, ranked_submission, register, stats, status, submission, tasks, ticket, \
     two_factor, user, widgets
@@ -23,6 +21,7 @@ from judge.views.select2 import AssigneeSelect2View, CommentSelect2View, Contest
     ContestUserSearchSelect2View, OrganizationSelect2View, OrganizationUserSelect2View, ProblemSelect2View, \
     TicketUserSelect2View, UserSearchSelect2View, UserSelect2View
 from judge.views.widgets import martor_image_uploader
+from martor.views import markdown_search_user
 
 admin.autodiscover()
 
@@ -67,10 +66,13 @@ register_patterns = [
         template_name='registration/password_reset_done.html',
     ), name='password_reset_done'),
     path('social/error/', register.social_auth_error, name='social_auth_error'),
+    path('email/change/', user.EmailChangeRequestView.as_view(), name='email_change'),
+    path('email/change/activate/<str:activation_key>/',
+         user.EmailChangeActivateView.as_view(), name='email_change_activate'),
 
     path('2fa/', two_factor.TwoFactorLoginView.as_view(), name='login_2fa'),
     path('2fa/enable/', two_factor.TOTPEnableView.as_view(), name='enable_2fa'),
-    path('2fa/refresh/', two_factor.TOTPRefreshView.as_view(), name='refresh_2fa'),
+    path('2fa/edit/', two_factor.TOTPEditView.as_view(), name='edit_2fa'),
     path('2fa/disable/', two_factor.TOTPDisableView.as_view(), name='disable_2fa'),
     path('2fa/webauthn/attest/', two_factor.WebAuthnAttestationView.as_view(), name='webauthn_attest'),
     path('2fa/webauthn/assert/', two_factor.WebAuthnAttestView.as_view(), name='webauthn_assert'),
@@ -373,20 +375,7 @@ urlpatterns = [
         path('/notes', ticket.TicketNotesEditView.as_view(), name='ticket_notes'),
     ])),
 
-    path('sitemap.xml', sitemap, {'sitemaps': {
-        'problem': ProblemSitemap,
-        'user': UserSitemap,
-        'home': HomePageSitemap,
-        'pages': UrlSitemap([
-            {'location': '/about/', 'priority': 0.9},
-        ]),
-        'problem': ProblemSitemap,
-        'solutions': SolutionSitemap,
-        'blog': BlogPostSitemap,
-        'contest': ContestSitemap,
-        'organization': OrganizationSitemap,
-        'user': UserSitemap,
-    }}),
+    path('sitemap.xml', sitemap, {'sitemaps': sitemaps}),
 
     path('judge-select2/', include([
         path('profile/', UserSelect2View.as_view(), name='profile_select2'),
@@ -407,15 +396,8 @@ urlpatterns = [
     ])),
 ]
 
-favicon_paths = ['apple-touch-icon-180x180.png', 'apple-touch-icon-114x114.png', 'android-chrome-72x72.png',
-                 'apple-touch-icon-57x57.png', 'apple-touch-icon-72x72.png', 'apple-touch-icon.png', 'mstile-70x70.png',
-                 'android-chrome-36x36.png', 'apple-touch-icon-precomposed.png', 'apple-touch-icon-76x76.png',
-                 'apple-touch-icon-60x60.png', 'android-chrome-96x96.png', 'mstile-144x144.png', 'mstile-150x150.png',
-                 'safari-pinned-tab.svg', 'android-chrome-144x144.png', 'apple-touch-icon-152x152.png',
-                 'favicon-96x96.png',
-                 'favicon-32x32.png', 'favicon-16x16.png', 'android-chrome-192x192.png', 'android-chrome-48x48.png',
-                 'mstile-310x150.png', 'apple-touch-icon-144x144.png', 'browserconfig.xml', 'manifest.json',
-                 'apple-touch-icon-120x120.png', 'mstile-310x310.png']
+favicon_paths = ['favicon-96x96.png', 'icon.svg', 'favicon.ico', 'apple-touch-icon.png', 'site.webmanifest',
+                 'web-app-manifest-192x192.png', 'web-app-manifest-512x512.png']
 
 static_lazy = lazy(static, str)
 for favicon in favicon_paths:

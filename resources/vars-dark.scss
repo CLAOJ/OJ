@@ -1,4 +1,4 @@
-@import "vars-common";
+@forward "vars-common";
 
 $is_light_theme: false;
 
@@ -9,6 +9,7 @@ $color_primary25: #3b4d56;  // border
 $color_primary33: #555;     // widget
 $color_primary50: #546e7a;
 $color_primary60: #78909c;
+$color_primary66: #aaa;     // tabs
 $color_primary75: #90a4ae;     // widget
 $color_primary90: #b0bec5;
 $color_primary100: #cfd8dc;
@@ -28,8 +29,12 @@ $color_header_border: $color_primary25;
 $color_pageBg: #1c2429;    // #212121 because some elements should be darker than pageBg
 
 // custom one-off colours
+$color_base_description_blockquote: #3b3b3b;
+
 $color_contest_ranking_disqualified: #622;
 $color_first_solve: #004d40;
+
+$color_martor_resize_dragger: #232323;
 
 $color_rating_none: #aaa;
 $color_rating_newbie: #988f81;
@@ -49,7 +54,18 @@ $color_user_submission_activity2: #1b5e20;
 $color_user_submission_activity3: #2e7d32;
 $color_user_submission_activity4: #43a047;
 
-$color_pagination_hover: $color_primary33;
+$color_info25: #023;
+$color_info50: #068;
+$color_info100: #7df;
+$color_success25: #031;
+$color_success50: #172;
+$color_success100: #6f8;
+$color_warning25: #320;
+$color_warning50: #960;
+$color_warning100: #fd6;
+$color_danger25: #311;
+$color_danger50: #822;
+$color_danger100: #f99;
 
 $color_problem_submit_select2: #8a8a8a;
 

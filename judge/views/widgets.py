@@ -8,11 +8,11 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.storage import default_storage
-from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpResponseForbidden, HttpResponseNotFound, \
+    HttpResponseRedirect
 from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 from django.views.generic import View
-from martor.api import imgur_uploader
 
 from judge.models import Submission
 
@@ -116,12 +116,11 @@ def submission_uploader(submission_file, problem_code, user_id):
 
 @login_required
 def martor_image_uploader(request):
-    if request.method != 'POST' or not request.is_ajax() or 'markdown-image-upload' not in request.FILES:
+    if not (request.user.is_staff or request.user.has_perm('judge.upload_image_server')):
+        return HttpResponseNotFound()
+    if request.method != 'POST' or 'markdown-image-upload' not in request.FILES:
         return HttpResponseBadRequest('Invalid request')
 
     image = request.FILES['markdown-image-upload']
-    if request.user.is_staff or request.user.has_perm('judge.upload_image_server'):
-        data = django_uploader(image)
-    else:
-        data = imgur_uploader(image)
+    data = django_uploader(image)
     return HttpResponse(data, content_type='application/json')

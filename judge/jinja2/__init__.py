@@ -2,7 +2,6 @@ import itertools
 import json
 from urllib.parse import quote
 
-from django.utils.http import urlquote
 from jinja2.ext import Extension
 from mptt.utils import get_cached_trees
 from statici18n.templatetags.statici18n import inlinei18n

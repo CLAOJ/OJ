@@ -8,6 +8,7 @@ import pyotp
 import webauthn
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import F, Max, Sum
@@ -60,6 +61,8 @@ class Organization(models.Model):
                                            blank=True,
                                            help_text=_('This image will replace the default site logo for users '
                                                        'viewing the organization.'))
+    class_required = models.BooleanField(verbose_name=_('class membership required'), default=False,
+                                         help_text=_('Whether members are compelled to select a class when joining.'))
     member_count = models.IntegerField(default=0)
     performance_points = models.FloatField(default=0)
 
@@ -87,6 +90,16 @@ class Organization(models.Model):
         if self.member_count != member_count:
             self.member_count = member_count
             self.save(update_fields=['member_count'])
+
+    def clean(self):
+        if self.class_required and self.is_open:
+            raise ValidationError(_('Class membership cannot be enforced when organization has open enrollment.'))
+
+    def can_review_all_requests(self, profile):
+        return self.admins.filter(id=profile.id).exists()
+
+    def can_review_class_requests(self, profile):
+        return self.classes.filter(admins__id=profile.id).exists()
 
     def __contains__(self, item):
         if item is None:
@@ -119,6 +132,40 @@ class Organization(models.Model):
         verbose_name_plural = _('organizations')
 
 
+class Class(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, verbose_name=_('organization'),
+                                     help_text=_('The organization that this class belongs to.'),
+                                     related_name='classes', related_query_name='class')
+    name = models.CharField(max_length=128, verbose_name=_('class name'), unique=True)
+    slug = models.SlugField(max_length=128, verbose_name=_('class slug'), help_text=_('Class name shown in URLs.'))
+    description = models.TextField(verbose_name=_('class description'), blank=True)
+    is_active = models.BooleanField(verbose_name=_('is class active'), default=True)
+    access_code = models.CharField(max_length=7, verbose_name=_('access code'), null=True, blank=True,
+                                   help_text=_('Student access code.'))
+    admins = models.ManyToManyField('Profile', verbose_name=_('administrators'), related_name='class_admin_of',
+                                    help_text=_('Those who can approve membership to this class.'))
+    members = models.ManyToManyField('Profile', verbose_name=_('members'), blank=True,
+                                     related_name='classes', related_query_name='class')
+
+    class Meta:
+        ordering = ['organization', 'name']
+        verbose_name = _('class')
+        verbose_name_plural = _('classes')
+
+    @classmethod
+    def get_visible_classes(cls, user):
+        if not user.is_authenticated:
+            return cls.objects.none()
+
+        if user.has_perm('judge.edit_all_organization'):
+            return cls.objects.all()
+
+        return cls.objects.filter(organization__admins=user.profile) | cls.objects.filter(admins=user.profile)
+
+    def __str__(self):
+        return self.name
+
+
 class Profile(models.Model):
     user = models.OneToOneField(User, verbose_name=_('user associated'), on_delete=models.CASCADE)
     about = models.TextField(verbose_name=_('self-description'), null=True, blank=True)
@@ -126,10 +173,10 @@ class Profile(models.Model):
                                 default=settings.DEFAULT_USER_TIME_ZONE)
     language = models.ForeignKey('Language', verbose_name=_('preferred language'), on_delete=models.SET_DEFAULT,
                                  default=Language.get_default_language_pk)
-    points = models.FloatField(default=0, db_index=True)
-    performance_points = models.FloatField(default=0, db_index=True)
+    points = models.FloatField(default=0)
+    performance_points = models.FloatField(default=0)
     contribution_points = models.IntegerField(default=0, db_index=True)
-    problem_count = models.IntegerField(default=0, db_index=True)
+    problem_count = models.IntegerField(default=0)
     ace_theme = models.CharField(max_length=30, verbose_name=_('Ace theme'), choices=ACE_THEMES, default='auto')
     site_theme = models.CharField(max_length=10, verbose_name=_('site theme'), choices=SITE_THEMES, default='auto')
     last_access = models.DateTimeField(verbose_name=_('last access time'), default=now)
@@ -142,6 +189,9 @@ class Profile(models.Model):
                                default=False)
     is_unlisted = models.BooleanField(verbose_name=_('unlisted user'), help_text=_('User will not be ranked.'),
                                       default=False)
+    is_banned_from_problem_voting = models.BooleanField(
+        verbose_name=_('banned from voting on problem point values'), default=False,
+        help_text=_("User will not be able to vote on problems' point values."))
     ban_reason = models.TextField(null=True, blank=True,
                                   help_text=_('Show to banned user in login page.'))
     rating = models.IntegerField(null=True, default=None)
@@ -194,12 +244,14 @@ class Profile(models.Model):
 
     @cached_property
     def has_any_solves(self):
-        return self.submission_set.filter(result='AC', case_points__gte=F('case_total')).exists()
+        return self.submission_set.filter(is_archived=False, result='AC', case_points__gte=F('case_total')).exists()
 
     @cached_property
     def resolved_ace_theme(self):
         if self.ace_theme != 'auto':
             return self.ace_theme
+        if not self.user.has_perm('judge.test_site'):
+            return settings.DMOJ_THEME_DEFAULT_ACE_THEME.get('light')
         if self.site_theme != 'auto':
             return settings.DMOJ_THEME_DEFAULT_ACE_THEME.get(self.site_theme)
         # This must be resolved client-side using prefers-color-scheme.
@@ -211,14 +263,15 @@ class Profile(models.Model):
         from judge.models import Problem
         public_problems = Problem.get_public_problems()
         data = (
-            public_problems.filter(submission__user=self, submission__points__isnull=False)
+            public_problems.filter(submission__user=self, submission__is_archived=False,
+                                   submission__points__isnull=False)
                            .annotate(max_points=Max('submission__points')).order_by('-max_points')
                            .values_list('max_points', flat=True).filter(max_points__gt=0)
         )
         bonus_function = settings.DMOJ_PP_BONUS_FUNCTION
         points = sum(data)
         problems = (
-            public_problems.filter(submission__user=self, submission__result='AC',
+            public_problems.filter(submission__user=self, submission__is_archived=False, submission__result='AC',
                                    submission__case_points__gte=F('submission__case_total'))
             .values('id').distinct().count()
         )
@@ -350,9 +403,16 @@ class Profile(models.Model):
             ('high_problem_timelimit', _('Can set high problem timelimit')),
             ('long_contest_duration', _('Can set long contest duration')),
             ('upload_image_server', _('Can upload image to server')),
+            ('deactivate_users', _('Deactivate users')),
         )
         verbose_name = _('user profile')
         verbose_name_plural = _('user profiles')
+
+        indexes = [
+            models.Index(fields=('is_unlisted', '-performance_points')),
+            models.Index(fields=('is_unlisted', '-rating')),
+            models.Index(fields=('is_unlisted', '-problem_count')),
+        ]
 
 
 class WebAuthnCredential(models.Model):
@@ -396,7 +456,15 @@ class OrganizationRequest(models.Model):
         ('A', _('Approved')),
         ('R', _('Rejected')),
     ))
+    request_class = models.ForeignKey(Class, verbose_name=_('class'), on_delete=models.CASCADE, null=True,
+                                      blank=True)
     reason = models.TextField(verbose_name=_('reason'))
+
+    def clean(self):
+        if self.organization.class_required and self.request_class is None:
+            raise ValidationError('Organization requires a class to be specified')
+        if self.request_class and self.organization_id != self.request_class.organization_id:
+            raise ValidationError('Class must be part of the organization')
 
     class Meta:
         verbose_name = _('organization join request')

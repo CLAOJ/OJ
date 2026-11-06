@@ -2,15 +2,17 @@ from operator import attrgetter
 
 from django import forms
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.forms import ModelForm
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.translation import gettext, gettext_lazy as _, ngettext
 from reversion.admin import VersionAdmin
 
-from judge.models import LanguageLimit, Problem, ProblemClarification, ProblemTranslation, Profile, Solution
+from judge.models import LanguageLimit, Problem, ProblemClarification, ProblemPointsVote, ProblemTranslation, \
+    Profile, Solution
 from judge.utils.views import NoBatchDeleteMixin
 from judge.widgets import AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget, AdminMartorWidget, \
     AdminSelect2MultipleWidget, AdminSelect2Widget, CheckboxSelectMultipleWithSelectAll
@@ -89,7 +91,7 @@ class ProblemSolutionForm(ModelForm):
 
     class Meta:
         widgets = {
-            'authors': AdminHeavySelect2MultipleWidget(data_view='profile_select2', attrs={'style': 'width: 100%'}),
+            'authors': AdminHeavySelect2MultipleWidget(data_view='profile_select2'),
             'content': AdminMartorWidget(attrs={'data-markdownfy-url': reverse_lazy('solution_preview')}),
         }
 
@@ -151,7 +153,8 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
     def get_actions(self, request):
         actions = super(ProblemAdmin, self).get_actions(request)
 
-        if request.user.has_perm('judge.change_public_visibility'):
+        if request.user.has_perm('judge.change_public_visibility') or \
+                request.user.has_perm('judge.create_private_problem'):
             func, name, desc = self.get_action('make_public')
             actions[name] = (func, name, desc)
 
@@ -165,8 +168,10 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         fields = self.readonly_fields
-        if not request.user.has_perm('judge.change_public_visibility'):
-            fields += ('is_public',)
+        if not request.user.has_perm('judge.create_private_problem'):
+            fields += ('organizations',)
+            if not request.user.has_perm('judge.change_public_visibility'):
+                fields += ('is_public',)
         if not request.user.has_perm('judge.change_manually_managed'):
             fields += ('is_manually_managed',)
         if not request.user.has_perm('judge.problem_full_markup'):
@@ -175,11 +180,11 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
                 fields += ('description',)
         return fields
 
+    @admin.display(description=_('authors'))
     def show_authors(self, obj):
         return ', '.join(map(attrgetter('user.username'), obj.authors.all()))
 
-    show_authors.short_description = _('Authors')
-
+    @admin.display(description='')
     def show_public(self, obj):
         return format_html('<a href="{1}">{0}</a>', gettext('View on site'), obj.get_absolute_url())
 
@@ -189,15 +194,17 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
         from judge.tasks import rescore_problem
         transaction.on_commit(rescore_problem.s(problem_id, publicy_changed).delay)
 
+    @admin.display(description=_('Set publish date to now'))
     def update_publish_date(self, request, queryset):
         count = queryset.update(date=timezone.now())
         self.message_user(request, ngettext("%d problem's publish date successfully updated.",
                                             "%d problems' publish date successfully updated.",
                                             count) % count)
 
-    update_publish_date.short_description = _('Set publish date to now')
-
+    @admin.display(description=_('Mark problems as public'))
     def make_public(self, request, queryset):
+        if not request.user.has_perm('judge.change_public_visibility'):
+            queryset = queryset.filter(is_organization_private=True)
         count = queryset.update(is_public=True)
         for problem_id in queryset.values_list('id', flat=True):
             self._rescore(request, problem_id, True)
@@ -205,17 +212,16 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
                                             '%d problems successfully marked as public.',
                                             count) % count)
 
-    make_public.short_description = _('Mark problems as public')
-
+    @admin.display(description=_('Mark problems as private'))
     def make_private(self, request, queryset):
+        if not request.user.has_perm('judge.change_public_visibility'):
+            queryset = queryset.filter(is_organization_private=True)
         count = queryset.update(is_public=False)
         for problem_id in queryset.values_list('id', flat=True):
             self._rescore(request, problem_id, True)
         self.message_user(request, ngettext('%d problem successfully marked as private.',
                                             '%d problems successfully marked as private.',
                                             count) % count)
-
-    make_private.short_description = _('Mark problems as private')
 
     def get_queryset(self, request):
         return Problem.get_editable_problems(request.user).prefetch_related('authors__user').distinct()
@@ -236,6 +242,16 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
         return form
 
     def save_model(self, request, obj, form, change):
+        # `organizations` will not appear in `cleaned_data` if user cannot edit it
+        if form.changed_data and 'organizations' in form.changed_data:
+            obj.is_organization_private = bool(form.cleaned_data['organizations'])
+
+        if form.cleaned_data.get('is_public') and not request.user.has_perm('judge.change_public_visibility'):
+            if not obj.is_organization_private:
+                raise PermissionDenied
+            if not request.user.has_perm('judge.create_private_problem'):
+                raise PermissionDenied
+
         super(ProblemAdmin, self).save_model(request, obj, form, change)
         if (
             form.changed_data and
@@ -247,3 +263,28 @@ class ProblemAdmin(NoBatchDeleteMixin, VersionAdmin):
         if form.cleaned_data.get('change_message'):
             return form.cleaned_data['change_message']
         return super(ProblemAdmin, self).construct_change_message(request, form, *args, **kwargs)
+
+
+class ProblemPointsVoteAdmin(admin.ModelAdmin):
+    list_display = ('points', 'voter', 'linked_problem', 'vote_time')
+    search_fields = ('voter__user__username', 'problem__code', 'problem__name')
+    readonly_fields = ('voter', 'problem', 'vote_time')
+
+    def get_queryset(self, request):
+        return ProblemPointsVote.objects.filter(problem__in=Problem.get_editable_problems(request.user))
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            return request.user.has_perm('judge.edit_own_problem')
+        return obj.problem.is_editable_by(request.user)
+
+    def lookup_allowed(self, key, value):
+        return super().lookup_allowed(key, value) or key in ('problem__code',)
+
+    @admin.display(description=_('problem'), ordering='problem__name')
+    def linked_problem(self, obj):
+        link = reverse('problem_detail', args=[obj.problem.code])
+        return format_html('<a href="{0}">{1}</a>', link, obj.problem.name)

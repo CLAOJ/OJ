@@ -1,9 +1,10 @@
-@import "vars";
+@use "vars" as *;
 
 #problem-table {
     td, th {
         // Text columns are left-aligned
         &.problem, &.category, &.types {
+            text-align: left;
             padding: 0 1em;
 	        width: 70%;
         }

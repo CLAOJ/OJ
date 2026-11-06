@@ -1,4 +1,4 @@
-@import "vars";
+@use "vars" as *;
 
 .h-scrollable-table {
     overflow-x: auto;
@@ -106,4 +106,8 @@
     thead tr th {
         border-bottom-left-radius: 0 !important;
     }
+}
+
+.striped tr:nth-child(even) {
+    background: rgba($color_primary100, 0.03);
 }

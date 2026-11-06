@@ -1,4 +1,5 @@
-from django.utils.html import escape, mark_safe
+from django.utils.html import escape, format_html
+from django.utils.safestring import mark_safe
 
 __all__ = ['highlight_code']
 

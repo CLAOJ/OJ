@@ -16,7 +16,7 @@ from moss import MOSS_LANG_C, MOSS_LANG_CC, MOSS_LANG_JAVA, MOSS_LANG_PASCAL, MO
 
 from judge import contest_format, event_poster as event
 from judge.models.problem import Problem
-from judge.models.profile import Organization, Profile
+from judge.models.profile import Class, Organization, Profile
 from judge.models.submission import Submission
 from judge.ratings import rate_contest
 from judge.utils.unicode import utf8bytes
@@ -79,6 +79,14 @@ class Contest(models.Model):
     testers = models.ManyToManyField(Profile, help_text=_('These users will be able to view the contest, '
                                                           'but not edit it.'),
                                      blank=True, related_name='testers+')
+    tester_see_scoreboard = models.BooleanField(verbose_name=_('testers see scoreboard'), default=False,
+                                                 help_text=_('If testers can see the scoreboard.'))
+    tester_see_submissions = models.BooleanField(verbose_name=_('testers see submissions'), default=False,
+                                                 help_text=_('If testers can see in-contest submissions.'))
+    spectators = models.ManyToManyField(Profile, verbose_name=_('spectators'), blank=True,
+                                        related_name='spectated_contests',
+                                        help_text=_('These users will be able to spectate the contest, '
+                                                    'but not see the problems ahead of time.'))
     description = models.TextField(verbose_name=_('description'), blank=True)
     problems = models.ManyToManyField(Problem, verbose_name=_('problems'), through='ContestProblem')
     start_time = models.DateTimeField(verbose_name=_('start time'), db_index=True)
@@ -93,6 +101,16 @@ class Contest(models.Model):
     view_contest_scoreboard = models.ManyToManyField(Profile, verbose_name=_('view contest scoreboard'), blank=True,
                                                      related_name='view_contest_scoreboard',
                                                      help_text=_('These users will be able to view the scoreboard.'))
+    view_contest_submissions = models.ManyToManyField(Profile, verbose_name=_('can see contest submissions'),
+                                                      blank=True, related_name='view_contest_submissions',
+                                                      help_text=_('These users will be able '
+                                                                  'to see in-contest submissions.'))
+    limit_join_organizations = models.BooleanField(verbose_name=_('limit organizations that can join'), default=False)
+    join_organizations = models.ManyToManyField(Organization, blank=True, verbose_name=_('join organizations'),
+                                                help_text=_('If non-empty, only these organizations may join '
+                                                            'the contest.'), related_name='join_only_contests')
+    classes = models.ManyToManyField(Class, blank=True, verbose_name=_('classes'),
+                                     help_text=_('If organization private, only these classes may see the contest.'))
     scoreboard_visibility = models.CharField(verbose_name=_('scoreboard visibility'), default=SCOREBOARD_VISIBLE,
                                              max_length=1, help_text=_('Scoreboard visibility through the duration '
                                                                        'of the contest'), choices=SCOREBOARD_VISIBILITY)
@@ -109,7 +127,14 @@ class Contest(models.Model):
                                        null=True, blank=True)
     rating_ceiling = models.IntegerField(verbose_name=('rating ceiling'), help_text=_('Rating ceiling for contest'),
                                          null=True, blank=True)
-    rate_all = models.BooleanField(verbose_name=_('rate all'), help_text=_('Rate all users who joined.'), default=False)
+    performance_ceiling_override = models.IntegerField(verbose_name=_('performance ceiling override'),
+                                                       help_text=_('Overrides the performance_ceiling parameter '
+                                                                   'used in computing ratings. '
+                                                                   "Do not modify unless you know what you're doing!"),
+                                                       null=True, blank=True)
+    rate_all = models.BooleanField(verbose_name=_('rate all'),
+                                   help_text=_('Rate users even if they make no submissions.'),
+                                   default=False)
     rate_exclude = models.ManyToManyField(Profile, verbose_name=_('exclude from ratings'), blank=True,
                                           related_name='rate_exclude+')
     is_private = models.BooleanField(verbose_name=_('private to specific users'), default=False)
@@ -274,6 +299,15 @@ class Contest(models.Model):
             return None
 
     @cached_property
+    def performance_ceiling(self):
+        if self.performance_ceiling_override is not None:
+            return self.performance_ceiling_override
+        elif self.rating_ceiling:
+            return self.rating_ceiling + settings.DMOJ_CONTEST_PERF_CEILING_INCREMENT
+        else:
+            return None
+
+    @cached_property
     def ended(self):
         return self.end_time < self._now
 
@@ -369,6 +403,45 @@ class Contest(models.Model):
                 return
             raise self.PrivateContest()
 
+    # Assumes the user can access, to avoid the cost again
+    def is_live_joinable_by(self, user):
+        if not self.started:
+            return False
+
+        if not user.is_authenticated:
+            return False
+
+        # Can be populated using annotate for performance in list views.
+        editor_or_tester = getattr(self, 'editor_or_tester', None)
+        if editor_or_tester is None:
+            editor_or_tester = user.profile.id in self.editor_ids or user.profile.id in self.tester_ids
+
+        if editor_or_tester:
+            return False
+
+        completed_contest = getattr(self, 'completed_contest', None)
+        if completed_contest is None:
+            completed_contest = self.has_completed_contest(user)
+
+        if completed_contest:
+            return False
+
+        if self.limit_join_organizations:
+            return self.join_organizations.filter(id__in=user.profile.organizations.all()).exists()
+        return True
+
+    # Also skips access check
+    def is_spectatable_by(self, user):
+        if not user.is_authenticated:
+            return False
+
+        if user.profile.id in self.editor_ids or user.profile.id in self.tester_ids:
+            return True
+
+        if self.limit_join_organizations:
+            return self.join_organizations.filter(id__in=user.profile.organizations.all()).exists()
+        return True
+
     def is_accessible_by(self, user):
         try:
             self.access_check(user)
@@ -437,6 +510,7 @@ class Contest(models.Model):
             ('change_contest_visibility', _('Change contest visibility')),
             ('contest_problem_label', _('Edit contest problem label script')),
             ('lock_contest', _('Change lock status of contest')),
+            ('override_performance_ceiling', _('Override performance ceiling of contest')),
         )
         verbose_name = _('contest')
         verbose_name_plural = _('contests')

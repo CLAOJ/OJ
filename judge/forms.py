@@ -19,14 +19,13 @@ from django.urls import reverse, reverse_lazy
 from django.utils.text import format_lazy
 from django.utils.translation import gettext_lazy as _, ngettext_lazy
 
-from django_ace import AceWidget
 from judge.models import BlogPost, Contest, ContestAnnouncement, ContestProblem, Language, LanguageLimit, \
-    Organization, Problem, Profile, Solution, Submission, WebAuthnCredential
+    Organization, Problem, ProblemPointsVote, Profile, Solution, Submission, WebAuthnCredential
 from judge.utils.captcha import TurnstileField
+from judge.utils.mail import validate_email_domain
 from judge.utils.subscription import newsletter_id
-from judge.widgets import HeavyPreviewPageDownWidget, HeavySelect2MultipleWidget, HeavySelect2Widget, MartorWidget, \
+from judge.widgets import AceWidget, HeavySelect2MultipleWidget, HeavySelect2Widget, MartorWidget, \
     Select2MultipleWidget, Select2Widget
-
 
 TOTP_CODE_LENGTH = 6
 
@@ -73,11 +72,7 @@ class ProfileForm(ModelForm):
             fields.append('math_engine')
             widgets['math_engine'] = Select2Widget(attrs={'style': 'width:200px'})
 
-        if HeavyPreviewPageDownWidget is not None:
-            widgets['about'] = HeavyPreviewPageDownWidget(
-                preview=reverse_lazy('profile_preview'),
-                attrs={'style': 'max-width:700px;min-width:700px;width:700px'},
-            )
+        widgets['about'] = MartorWidget(attrs={'data-markdownfy-url': reverse_lazy('profile_preview')})
 
     def clean_about(self):
         if 'about' in self.changed_data and not self.instance.has_any_solves:
@@ -261,6 +256,26 @@ class LanguageLimitFormSet(inlineformset_factory(Problem, LanguageLimit, form=La
     pass
 
 
+class EmailChangeForm(Form):
+    password = CharField(widget=forms.PasswordInput())
+    email = forms.EmailField()
+
+    def __init__(self, *args, user, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+
+    def clean_email(self):
+        if User.objects.filter(email=self.cleaned_data['email']).exists():
+            raise ValidationError(_('This email address is already taken.'))
+        validate_email_domain(self.cleaned_data['email'])
+        return self.cleaned_data['email']
+
+    def clean_password(self):
+        if not self.user.check_password(self.cleaned_data['password']):
+            raise ValidationError(_('Invalid password'))
+        return self.cleaned_data['password']
+
+
 class DownloadDataForm(Form):
     comment_download = BooleanField(required=False, label=_('Download comments?'))
     submission_download = BooleanField(required=False, label=_('Download submissions?'))
@@ -347,10 +362,9 @@ class ProblemSubmitForm(ModelForm):
 class OrganizationForm(ModelForm):
     class Meta:
         model = Organization
-        fields = ['name', 'slug', 'is_open', 'about', 'logo_override_image']
-        widgets = {'admins': Select2MultipleWidget(attrs={'style': 'width: 100%'})}
-        if HeavyPreviewPageDownWidget is not None:
-            widgets = {'about': HeavyPreviewPageDownWidget(preview=reverse_lazy('organization_preview'))}
+        fields = ['about', 'logo_override_image', 'admins']
+        widgets = {'admins': Select2MultipleWidget(attrs={'style': 'width: 200px'})}
+        widgets['about'] = MartorWidget(attrs={'data-markdownfy-url': reverse_lazy('organization_preview')})
 
 
 class CustomAuthenticationForm(AuthenticationForm):
@@ -403,7 +417,7 @@ class NoAutoCompleteCharField(forms.CharField):
 class TOTPForm(Form):
     TOLERANCE = settings.DMOJ_TOTP_TOLERANCE_HALF_MINUTES
 
-    totp_or_scratch_code = NoAutoCompleteCharField(required=False)
+    totp_or_scratch_code = NoAutoCompleteCharField(required=False, widget=forms.TextInput(attrs={'autofocus': True}))
 
     def __init__(self, *args, **kwargs):
         self.profile = kwargs.pop('profile')
@@ -656,3 +670,11 @@ class CompareSubmissionsForm(Form):
     user = forms.ChoiceField(
         widget=HeavySelect2MultipleWidget(data_view='profile_select2', attrs={'style': 'width: 100%'}),
     )
+
+
+class ProblemPointsVoteForm(ModelForm):
+    note = CharField(max_length=8192, required=False)
+
+    class Meta:
+        model = ProblemPointsVote
+        fields = ['points', 'note']

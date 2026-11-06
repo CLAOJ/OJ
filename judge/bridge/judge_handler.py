@@ -27,7 +27,7 @@ UPDATE_RATE_LIMIT = 5
 UPDATE_RATE_TIME = 0.5
 SubmissionData = namedtuple(
     'SubmissionData',
-    'time memory short_circuit pretests_only contest_no attempt_no user_id file_only file_size_limit',
+'time memory short_circuit pretests_only contest_no attempt_no user_id user_notes file_only file_size_limit'
 )
 
 
@@ -80,6 +80,8 @@ class JudgeHandler(ZlibPacketHandler):
         self.time_delta = None
         self.load = 1e100
         self.name = None
+        self.is_disabled = False
+        self.tier = None
         self.batch_id = None
         self.in_batch = False
         self._stop_ping = threading.Event()
@@ -127,6 +129,9 @@ class JudgeHandler(ZlibPacketHandler):
         if judge.is_blocked:
             json_log.warning(self._make_json_log(action='auth', judge=id, info='judge authenticated but is blocked'))
             return False
+
+        # Cache judge tier for use by JudgeList
+        self.tier = judge.tier
 
         return True
 
@@ -200,13 +205,13 @@ class JudgeHandler(ZlibPacketHandler):
         _ensure_connection()
 
         try:
-            pid, time, memory, short_circuit, lid, is_pretested, sub_date, uid, part_virtual, part_id, \
+            pid, time, memory, short_circuit, lid, is_pretested, sub_date, uid, part_virtual, part_id, user_notes, \
                 file_only, file_size_limit = (
                     Submission.objects.filter(id=submission)
                               .values_list('problem__id', 'problem__time_limit', 'problem__memory_limit',
                                            'problem__short_circuit', 'language__id', 'is_pretested', 'date',
                                            'user__id', 'contest__participation__virtual', 'contest__participation__id',
-                                           'language__file_only', 'language__file_size_limit')).get()
+                                           'user__notes', 'language__file_only', 'language__file_size_limit')).get()
         except Submission.DoesNotExist:
             logger.error('Submission vanished: %s', submission)
             json_log.error(self._make_json_log(
@@ -232,6 +237,7 @@ class JudgeHandler(ZlibPacketHandler):
             contest_no=part_virtual,
             attempt_no=attempt_no,
             user_id=uid,
+            user_notes=user_notes,
             file_only=file_only,
             file_size_limit=file_size_limit,
         )
@@ -261,6 +267,7 @@ class JudgeHandler(ZlibPacketHandler):
                 'in-contest': data.contest_no,
                 'attempt-no': data.attempt_no,
                 'user': data.user_id,
+                'user-notes': data.user_notes,
                 'file-only': data.file_only,
                 'file-size-limit': data.file_size_limit,
             },
@@ -499,8 +506,8 @@ class JudgeHandler(ZlibPacketHandler):
         self._free_self(packet)
 
         if Submission.objects.filter(id=packet['submission-id']).update(status='AB', result='AB', points=0):
-            event.post('sub_%s' % Submission.get_id_secret(packet['submission-id']), {'type': 'aborted-submission'})
-            self._post_update_submission(packet['submission-id'], 'terminated', done=True)
+            event.post('sub_%s' % Submission.get_id_secret(packet['submission-id']), {'type': 'aborted'})
+            self._post_update_submission(packet['submission-id'], 'aborted', done=True)
             json_log.info(self._make_json_log(packet, action='aborted', finish=True, result='AB'))
         else:
             logger.warning('Unknown submission: %s', packet['submission-id'])

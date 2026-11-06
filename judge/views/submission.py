@@ -25,6 +25,7 @@ from judge.models import Contest, Language, Organization, Problem, ProblemTransl
 from judge.models.problem import SubmissionSourceAccess
 from judge.utils.infinite_paginator import InfinitePaginationMixin
 from judge.utils.problem_data import get_problem_testcases_data
+from judge.utils.lazy import memo_lazy
 from judge.utils.problems import get_result_data, user_completed_ids, user_editable_ids, user_tester_ids
 from judge.utils.raw_sql import join_sql_subquery, use_straight_join
 from judge.utils.views import DiggPaginatorMixin, TitleMixin, generic_message
@@ -271,7 +272,7 @@ def abort_submission(request, submission):
 def filter_submissions_by_visible_problems(queryset, user):
     join_sql_subquery(
         queryset,
-        subquery=str(Problem.get_visible_problems(user).distinct().only('id').query),
+        subquery=str(Problem.get_visible_problems(user).only('id').query),
         params=[],
         join_fields=[('problem_id', 'id')],
         alias='visible_problems',
@@ -328,17 +329,32 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
             queryset = queryset.select_related('contest_object').defer('contest_object__description')
 
             if not self.request.user.has_perm('judge.see_private_contest'):
-                # Show submissions for any contest you can edit or visible scoreboard
-                contest_queryset = Contest.objects.filter(Q(authors=self.request.profile) |
-                                                          Q(curators=self.request.profile) |
-                                                          Q(scoreboard_visibility=Contest.SCOREBOARD_VISIBLE) |
-                                                          Q(end_time__lt=timezone.now())).distinct()
-                queryset = queryset.filter(Q(user=self.request.profile) |
-                                           Q(contest_object__in=contest_queryset) |
-                                           Q(contest_object__isnull=True))
+                # Show submissions for any contest you can edit or where you can see submissions
+                contest_queryset = Contest.objects.filter(
+                    Q(authors=self.request.profile) |
+                    Q(curators=self.request.profile) |
+                    Q(tester_see_submissions=True, testers=self.request.profile) |
+                    Q(view_contest_submissions=self.request.profile) |
+                    Q(scoreboard_visibility=Contest.SCOREBOARD_VISIBLE) |
+                    Q(end_time__lt=timezone.now(), scoreboard_visibility__in=(
+                        Contest.SCOREBOARD_AFTER_PARTICIPATION,
+                        Contest.SCOREBOARD_AFTER_CONTEST,
+                    )),
+                ).distinct()
+
+                queryset = queryset.filter(
+                    Q(user=self.request.profile) |
+                    Q(contest_object__in=contest_queryset) |
+                    Q(contest_object__isnull=True),
+                )
 
         if self.selected_languages:
-            queryset = queryset.filter(language__in=Language.objects.filter(key__in=self.selected_languages))
+            # MariaDB can't optimize this subquery for some insane, unknown reason,
+            # so we are forcing an eager evaluation to get the IDs right here.
+            # Otherwise, with multiple language filters, MariaDB refuses to use an index
+            # (or runs the subquery for every submission, which is even more horrifying to think about).
+            queryset = queryset.filter(language__in=list(
+                Language.objects.filter(key__in=self.selected_languages).values_list('id', flat=True)))
         if self.selected_statuses:
             queryset = queryset.filter(result__in=self.selected_statuses)
         if self.selected_organization:
@@ -375,9 +391,11 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
         context['dynamic_update'] = False
         context['dynamic_contest_id'] = self.in_contest and self.contest.id
         context['show_problem'] = self.show_problem
-        context['completed_problem_ids'] = user_completed_ids(self.request.profile) if authenticated else []
-        context['editable_problem_ids'] = user_editable_ids(self.request.profile) if authenticated else []
-        context['tester_problem_ids'] = user_tester_ids(self.request.profile) if authenticated else []
+
+        profile = self.request.profile
+        context['completed_problem_ids'] = memo_lazy(lambda: user_completed_ids(profile), set) if authenticated else []
+        context['editable_problem_ids'] = memo_lazy(lambda: user_editable_ids(profile), set) if authenticated else []
+        context['tester_problem_ids'] = memo_lazy(lambda: user_tester_ids(profile), set) if authenticated else []
 
         context['all_languages'] = Language.objects.all().values_list('key', 'name')
         context['selected_languages'] = self.selected_languages
@@ -402,6 +420,10 @@ class SubmissionsListBase(DiggPaginatorMixin, TitleMixin, ListView):
         check = self.access_check(request)
         if check is not None:
             return check
+
+        # Block all page > 1 for non-authenticated users. Page = 1 is not specified at all.
+        if not request.user.is_authenticated and 'page' in kwargs:
+            raise PermissionDenied()
 
         self.selected_languages = set(request.GET.getlist('language'))
         self.selected_statuses = set(request.GET.getlist('status'))

@@ -30,8 +30,8 @@
         {% if request.user.is_authenticated and perms.judge.rejudge_submission %}
             <script type="text/javascript">
                 window.rejudge_submission = function (id, e) {
-                    if ((typeof e !== 'undefined' && e.ctrlKey) ||
-                        confirm("{{ _('Are you sure you want to rejudge?') }}")) {
+                    if ((typeof e !== 'undefined' && (e.ctrlKey || e.metaKey)) ||
+                        confirm({{ _('Are you sure you want to rejudge?')|htmltojs }})) {
                         $.ajax({
                             url: "{{ url('submission_rejudge') }}",
                             type: "POST",
@@ -71,14 +71,14 @@
                 $('#status').select2({
                     theme: '{{ DMOJ_SELECT2_THEME }}',
                     multiple: 1,
-                    placeholder: "{{ _('Filter by status...') }}",
+                    placeholder: {{ _('Filter by status...')|htmltojs }},
                     matcher: idAndTextMatcher,
                 }).css({'visibility': 'visible'});
 
                 $('#language').select2({
                     theme: '{{ DMOJ_SELECT2_THEME }}',
                     multiple: 1,
-                    placeholder: "{{ _('Filter by language...') }}",
+                    placeholder: {{ _('Filter by language...')|htmltojs }},
                     matcher: idAndTextMatcher,
                 }).css({'visibility': 'visible'});
 
@@ -373,13 +373,13 @@
         <div id="content-left" class="submission">
 
             <div id="submissions-table">
-		{% set profile_id = request.profile.id if request.user.is_authenticated else 0 %}
-		{% for submission in submissions %}
-			<div class="submission-row" id="{{ submission.id }}">
-				{% with problem_name=show_problem and (submission.problem.i18n_name or submission.problem.name) %}
-					{% include "submission/row.html" %}
-				{% endwith %}
-			</div>
+                {% set profile_id = request.profile.id if request.user.is_authenticated else 0 %}
+                {% for submission in submissions %}
+                    <div class="submission-row{% if submission.is_archived %} submission-archived{% endif %}" id="{{ submission.id }}">
+                        {% with problem_name=show_problem and (submission.problem.i18n_name or submission.problem.name) %}
+                            {% include "submission/row.html" %}
+                        {% endwith %}
+                    </div>
                 {% endfor %}
             </div>
         </div>

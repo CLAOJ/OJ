@@ -3,7 +3,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.exceptions import ImproperlyConfigured, PermissionDenied
-from django.db.models import Count, FilteredRelation, Q
+from django.db.models import Count, FilteredRelation, IntegerField, OuterRef, Q, Subquery
 from django.db.models.expressions import F, Value
 from django.db.models.functions import Coalesce
 from django.forms import Form, modelformset_factory
@@ -21,7 +21,7 @@ from judge.forms import OrganizationForm
 from judge.models import BlogPost, Comment, Contest, Language, Organization, OrganizationRequest, \
     Problem, Profile
 from judge.utils.ranker import ranker
-from judge.utils.views import QueryStringSortMixin, TitleMixin, generic_message
+from judge.utils.views import DiggPaginatorMixin, QueryStringSortMixin, TitleMixin, generic_message
 from judge.views.blog import BlogPostCreate, PostListBase
 from judge.views.contests import ContestList, CreateContest
 from judge.views.problem import ProblemCreate, ProblemList
@@ -62,6 +62,22 @@ class OrganizationMixin(object):
         return org.is_admin(self.request.profile)
 
 
+class BaseOrganizationListView(OrganizationMixin, ListView):
+    model = None
+    context_object_name = None
+    slug_url_kwarg = 'slug'
+
+    def get_object(self):
+        return get_object_or_404(Organization, id=self.kwargs.get('pk'))
+
+    def get_context_data(self, **kwargs):
+        return super().get_context_data(organization=self.object, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        return super().get(request, *args, **kwargs)
+
+
 class OrganizationDetailView(OrganizationMixin, DetailView):
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -79,25 +95,32 @@ class OrganizationList(TitleMixin, ListView):
     title = gettext_lazy('Organizations')
 
     def get_queryset(self):
-        return Organization.objects.filter(is_unlisted=False)
+        return super(OrganizationList, self).get_queryset().filter(is_unlisted=False) \
+            .annotate(member_count=Count('member')).order_by('name')
 
 
-class OrganizationUsers(QueryStringSortMixin, OrganizationDetailView):
+class OrganizationUsers(QueryStringSortMixin, DiggPaginatorMixin, BaseOrganizationListView):
     template_name = 'organization/users.html'
     all_sorts = frozenset(('points', 'problem_count', 'rating', 'performance_points'))
     default_desc = all_sorts
     default_sort = '-performance_points'
+    paginate_by = 100
+    context_object_name = 'users'
+
+    def get_queryset(self):
+        return self.object.members.filter(is_unlisted=False).order_by(self.order).select_related('user') \
+            .defer('about', 'user_script', 'notes')
 
     def get_context_data(self, **kwargs):
         context = super(OrganizationUsers, self).get_context_data(**kwargs)
-        context['title'] = self.object.name
-        context['users'] = \
-            ranker(self.object.members.filter(is_unlisted=False).order_by(self.order)
-                   .select_related('user').defer('about', 'user_script', 'notes'))
+        context['title'] = _('%s Members') % self.object.name
+        context['users'] = ranker(context['users'])
         context['partial'] = True
         context['is_admin'] = self.can_edit_organization()
         context['kick_url'] = reverse('organization_user_kick', args=[self.object.id, self.object.slug])
+        context['first_page_href'] = '.'
         context.update(self.get_sort_context())
+        context.update(self.get_sort_paginate_context())
         return context
 
 
@@ -208,6 +231,14 @@ class OrganizationRequestBaseView(LoginRequiredMixin, SingleObjectTemplateRespon
         if not organization.is_admin(self.request.profile):
             raise PermissionDenied()
         return organization
+
+    def get_requests(self):
+        queryset = self.object.requests.select_related('user__user').defer(
+            'user__about', 'user__notes', 'user__user_script',
+        )
+        if not self.edit_all:
+            queryset = queryset.filter(request_class__in=self.object.classes.filter(admins__id=self.request.profile.id))
+        return queryset
 
     def get_context_data(self, **kwargs):
         context = super(OrganizationRequestBaseView, self).get_context_data(**kwargs)

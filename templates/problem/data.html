@@ -92,8 +92,8 @@
                 var $precision = $('<input>', {
                     type: 'number',
                     value: try_parse_json($args.val()).precision || 6,
-                    title: "{{ _('precision (decimal digits)') }}",
-                    style: 'width: 4em; margin-left: 6px;'
+                    title: {{ _('precision (decimal digits)')|htmltojs }},
+                    style: 'width: 4em'
                 }).change(function () {
                     if ($checker.val().startsWith('floats'))
                         $args.val(JSON.stringify({precision: parseInt($(this).val())}));
@@ -289,37 +289,42 @@
                         .find('input[id$=points], input[id$=pretest]').toggle(!disabled);
                 }).change();
 
-                var tooltip_classes = 'tooltipped tooltipped-s';
-                $tr.find('a.edit-generator-args').mouseover(function () {
-                    switch ($tr.attr('data-type')) {
-                        case 'C':
-                        case 'S':
-                            var $this = $(this).addClass(tooltip_classes);
-                            $this.attr('aria-label', $this.prev().val() || '(none)');
-                    }
-                }).mouseout(function () {
-                    $(this).removeClass(tooltip_classes).removeAttr('aria-label');
-                }).featherlight($('.generator-args-editor'), {
-                    beforeOpen: function () {
+                function addToolTip(linkClass, editorClass) {
+                    var tooltip_classes = 'tooltipped tooltipped-s';
+                    $tr.find(linkClass).mouseover(function () {
                         switch ($tr.attr('data-type')) {
                             case 'C':
                             case 'S':
-                                return true;
-                            default:
-                                return false;
+                            var $this = $(this).addClass(tooltip_classes);
+                            $this.attr('aria-label', $this.prev().val() || '(none)');
                         }
-                    },
-                    afterOpen: function () {
-                        var $input = this.$currentTarget.prev();
-                        this.$instance.find('.generator-args-editor')
+                    }).mouseout(function () {
+                        $(this).removeClass(tooltip_classes).removeAttr('aria-label');
+                    }).featherlight($(editorClass), {
+                        beforeOpen: function () {
+                            switch ($tr.attr('data-type')) {
+                                case 'C':
+                                case 'S':
+                                return true;
+                                default:
+                                return false;
+                            }
+                        },
+                        afterOpen: function () {
+                            var $input = this.$currentTarget.prev();
+                            this.$instance.find(editorClass)
                             .find('textarea').val($input.val()).end()
                             .find('.button').click(function () {
-                            $input.val($(this).prev().val());
-                            $.featherlight.current().close();
-                        }).end()
+                                $input.val($(this).prev().val());
+                                $.featherlight.current().close();
+                            }).end()
                             .show();
-                    }
-                });
+                        }
+                    });
+                }
+
+                addToolTip('a.edit-generator-args', '.generator-args-editor');
+                addToolTip('a.edit-batch-dependencies', '.batch-dependencies-editor');
 
             }).find('tbody:first').find('tr').each(function () {
                 $table.trigger('add-row', [$(this)]);
@@ -553,18 +558,18 @@
             cursor: move;
         }
 
-        .edit-generator-args {
+        .edit-generator-args, .edit-batch-dependencies {
             position: relative;
         }
 
-        .generator-args-editor textarea {
+        .generator-args-editor textarea, .batch-dependencies-editor textarea {
             display: block;
             width: 100%;
             margin-bottom: 0.5em;
             height: 8em;
         }
 
-        .generator-args-editor .button {
+        .generator-args-editor .button, .batch-dependencies-editor .button {
             display: block;
             float: right;
         }
@@ -629,7 +634,30 @@
             <a class="close">x</a>
             {{ (_('Test cases have been filled automatically and **not saved yet**!'))|markdown('default', strip_paragraphs=True) }}
             <br>
-            {{ _('Please modify the table below if needed and press the `Apply` button to save!') }}
+            {{ _('Please modify the table below if needed and press the `Apply` button to save!') }}</div>
+        <table class="table">{{ data_form.as_table() }}</table>
+        <div id="column-visible" data-problem="{{ problem.code }}">
+            <strong>{{ _('Show columns:') }}</strong>
+            <label>
+                <input type="checkbox" data-suffix="output_prefix">
+                {{ _('Output prefix') }}
+            </label>
+            <label>
+                <input type="checkbox" data-suffix="output_limit">
+                {{ _('Output limit') }}
+            </label>
+            <label>
+                <input type="checkbox" data-suffix="checker">
+                {{ _('Checker') }}
+            </label>
+            <label>
+                <input type="checkbox" data-suffix="generator_args">
+                {{ _('Generator args') }}
+            </label>
+            <label>
+                <input type="checkbox" data-suffix="batch_dependencies">
+                {{ _('Batch dependencies') }}
+            </label>
         </div>
         {% if cases_formset._non_form_errors %}
             {{ cases_formset._non_form_errors }}
@@ -648,7 +676,11 @@
                 <th>{{ _('Output file') }}</th>
                 <th>{{ _('Points') }}</th>
                 <th>{{ _('Pretest?') }}</th>
-                <!-- <th class="generator-args">{{ _('Generator args') }}</th> -->
+                <th class="output-prefix">{{ _('Output prefix') }}</th>
+                <th class="output-limit">{{ _('Output limit') }}</th>
+                <th class="checker">{{ _('Checker') }}</th>
+                <th class="generator-args">{{ _('Generator args') }}</th>
+                <th class="batch-dependencies">{{ _('Batch Dependencies') }}</th>
                 {% if cases_formset.can_delete %}
                     <th>{{ _('Delete?') }}
                         <br>
@@ -687,7 +719,13 @@
                             <i class="fa fa-pencil"></i>
                             {{ _('Edit') }}
                         </a>
-                    </td> -->
+                    </td>
+                    <td class="batch-dependencies">{{ form.batch_dependencies.errors }}{{ form.batch_dependencies }}
+                        <a href="javascript:void(0)" class="edit-batch-dependencies">
+                            <i class="fa fa-pencil"></i>
+                            {{ _('Edit') }}
+                        </a>
+                    </td>
                     {% if cases_formset.can_delete %}
                         <td>{{ form.DELETE }}</td>
                     {% endif %}
@@ -701,4 +739,5 @@
     <label for="save" class="unselectable button" style="margin: 1em 0; width: fit-content;"><i class="fa-solid fa-floppy-disk"></i> {{ _('Save test') }}</label>
     </form>
     <div style="display: none" class="generator-args-editor"><textarea></textarea><a class="button">{{ _('Save') }}</a></div>
+    <div style="display: none" class="batch-dependencies-editor"><textarea></textarea><a class="button">{{ _('Save') }}</a></div>
 {% endblock %}

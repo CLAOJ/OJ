@@ -1,26 +1,25 @@
-"""
+﻿"""
 Django settings for dmoj project.
 
 For more information on this file, see
-https://docs.djangoproject.com/en/3.2/ref/settings/
+https://docs.djangoproject.com/en/4.2/topics/settings/
 
 For the full list of settings and their values, see
-https://docs.djangoproject.com/en/3.2/topics/settings/
+https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import datetime
 import os
-import tempfile
 
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from django_jinja.builtins import DEFAULT_EXTENSIONS
 from jinja2 import select_autoescape
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 # Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
+# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "5*9f5q57mqmlz2#f$x1h76&jxy#yortjl1v+l*6hd18$d*yx#0"
@@ -92,35 +91,52 @@ DMOJ_CAMO_URL = None
 DMOJ_CAMO_KEY = None
 DMOJ_CAMO_HTTPS = False
 DMOJ_CAMO_EXCLUDE = ()
+
 DMOJ_PROBLEM_DATA_ROOT = None
+
 DMOJ_PROBLEM_MIN_TIME_LIMIT = 0  # seconds
 DMOJ_PROBLEM_MAX_TIME_LIMIT = 60  # seconds
 DMOJ_PROBLEM_MIN_MEMORY_LIMIT = 0  # kilobytes
 DMOJ_PROBLEM_MAX_MEMORY_LIMIT = 1048576  # kilobytes
 DMOJ_PROBLEM_MIN_PROBLEM_POINTS = 0
 DMOJ_PROBLEM_HOT_PROBLEM_COUNT = 7
-DMOJ_PROBLEM_STATEMENT_DISALLOWED_CHARACTERS = {"“", "”", "‘", "’"}
+
+DMOJ_PROBLEM_STATEMENT_DISALLOWED_CHARACTERS = {'â€œ', 'â€', 'â€˜', 'â€™', 'âˆ’', 'ï¬€', 'ï¬', 'ï¬‚', 'ï¬ƒ', 'ï¬„'}
 DMOJ_RATING_COLORS = True
 DMOJ_EMAIL_THROTTLING = (10, 60)
-DMOJ_STATS_LANGUAGE_THRESHOLD = 10
-DMOJ_SUBMISSIONS_REJUDGE_LIMIT = 10
+
 # Maximum number of submissions a single user can queue without the `spam_submission` permission
-CLAOJ_SUBMISSION_LIMIT = 2
+DMOJ_SUBMISSION_LIMIT = 2
+DMOJ_SUBMISSIONS_REJUDGE_LIMIT = 10
+
+# Rate limit submissions to prevent abuse
+DMOJ_SUBMISSION_RATELIMIT_TIMEFRAME = datetime.timedelta(days=1)
+DMOJ_SUBMISSION_RATELIMIT = 500
 # Whether to allow users to view source code: 'all' | 'all-solved' | 'only-own'
 DMOJ_SUBMISSION_SOURCE_VISIBILITY = "all-solved"
 DMOJ_BLOG_NEW_PROBLEM_COUNT = 7
 CLAOJ_ORG_NEW_CONTEST_COUNT = 5
 DMOJ_TOTP_TOLERANCE_HALF_MINUTES = 1
+DMOJ_2FA_HARDCORE = False
 DMOJ_SCRATCH_CODES_COUNT = 5
 DMOJ_USER_MAX_ORGANIZATION_COUNT = 3
+
 # Whether to allow users to download their data
 DMOJ_USER_DATA_DOWNLOAD = False
 DMOJ_USER_DATA_CACHE = ""
 DMOJ_USER_DATA_DOWNLOAD_RATELIMIT = datetime.timedelta(days=1)
+
 DMOJ_COMMENT_VOTE_HIDE_THRESHOLD = -5
 DMOJ_COMMENT_REPLY_TIMEFRAME = datetime.timedelta(days=365)
-DMOJ_PDF_PROBLEM_CACHE = ""
-DMOJ_PDF_PROBLEM_TEMP_DIR = tempfile.gettempdir()
+DMOJ_CONTEST_PERF_CEILING_INCREMENT = 400
+
+DMOJ_PDF_PDFOID_URL = None
+# Optional but recommended to save resources, path on disk to cache PDFs
+DMOJ_PDF_PROBLEM_CACHE = None
+# Optional, URL serving DMOJ_PDF_PROBLEM_CACHE with X-Accel-Redirect
+DMOJ_PDF_PROBLEM_INTERNAL = None
+
+DMOJ_STATS_LANGUAGE_THRESHOLD = 10
 DMOJ_STATS_SUBMISSION_RESULT_COLORS = {
     "TLE": "#a3bcbd",
     "AC": "#00a92a",
@@ -130,8 +146,15 @@ DMOJ_STATS_SUBMISSION_RESULT_COLORS = {
 }
 DMOJ_API_PAGE_SIZE = 1000
 
-DMOJ_PASSWORD_RESET_LIMIT_WINDOW = 3600
+# Number of password resets per window (in minutes)
+DMOJ_PASSWORD_RESET_LIMIT_WINDOW = 60
 DMOJ_PASSWORD_RESET_LIMIT_COUNT = 10
+
+# Number of email change requests per window (in minutes)
+DMOJ_EMAIL_CHANGE_LIMIT_WINDOW = 60
+DMOJ_EMAIL_CHANGE_LIMIT_COUNT = 10
+# Number of minutes before an email change request activation key expires
+DMOJ_EMAIL_CHANGE_EXPIRY_MINUTES = 60
 
 # At the bare minimum, dark and light theme CSS file locations must be declared
 DMOJ_THEME_CSS = {
@@ -144,6 +167,9 @@ DMOJ_THEME_DEFAULT_ACE_THEME = {
     'dark': 'tomorrow_night',
 }
 DMOJ_SELECT2_THEME = 'dmoj'
+
+DMOJ_ENABLE_COMMENTS = True
+DMOJ_ENABLE_SOCIAL = True
 
 MARKDOWN_STYLES = {}
 MARKDOWN_DEFAULT_STYLE = {}
@@ -171,23 +197,6 @@ TIMEZONE_DETECT_BACKEND = None
 
 TERMS_OF_SERVICE_URL = None
 DEFAULT_USER_LANGUAGE = "CPP17"
-
-PHANTOMJS = ""
-PHANTOMJS_PDF_ZOOM = 0.75
-PHANTOMJS_PDF_TIMEOUT = 5.0
-PHANTOMJS_PAPER_SIZE = "Letter"
-
-SLIMERJS = ""
-SLIMERJS_PDF_ZOOM = 0.75
-SLIMERJS_FIREFOX_PATH = ""
-SLIMERJS_PAPER_SIZE = "Letter"
-
-PUPPETEER_MODULE = "/usr/lib/node_modules/puppeteer"
-PUPPETEER_PAPER_SIZE = "Letter"
-
-USE_SELENIUM = False
-SELENIUM_CUSTOM_CHROME_PATH = None
-SELENIUM_CHROMEDRIVER_PATH = "chromedriver"
 
 INLINE_JQUERY = True
 INLINE_FONTAWESOME = True
@@ -309,7 +318,6 @@ INSTALLED_APPS += (
     "social_django",
     "compressor",
     "django_ace",
-    "pagedown",
     "sortedm2m",
     "statici18n",
     "impersonate",
@@ -328,6 +336,7 @@ MIDDLEWARE = (
     "judge.middleware.APIMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "judge.middleware.MiscConfigMiddleware",
     "judge.middleware.DMOJLoginMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -511,9 +520,8 @@ BLEACH_USER_SAFE_TAGS = [
 
 BLEACH_USER_SAFE_ATTRS = {
     "*": ["id", "class", "style"],
-    "img": ["src", "alt", "title", "width", "height", "data-src"],
+    "img": ["src", "alt", "title", "width", "height", "data-src", "align"],
     "a": ["href", "alt", "title"],
-    "iframe": ["src", "height", "width", "allow"],
     "abbr": ["title"],
     "dfn": ["title"],
     "time": ["datetime"],
@@ -534,6 +542,7 @@ BLEACH_USER_SAFE_ATTRS = {
         "width",
     ],
     "source": ["src", "srcset", "type"],
+    "li": ["value"],
 }
 
 MARKDOWN_STAFF_EDITABLE_STYLE = {
@@ -615,7 +624,7 @@ PDF_SAFE_EXTS = {"pdf"}
 PDF_MAX_FILE_SIZE = 5242880
 
 # Database
-# https://docs.djangoproject.com/en/3.2/ref/settings/#databases
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
     "default": {
@@ -647,21 +656,20 @@ EVENT_DAEMON_CONTEST_KEY = (
 )
 
 # Internationalization
-# https://docs.djangoproject.com/en/3.2/topics/i18n/
+# https://docs.djangoproject.com/en/4.2/topics/i18n/
 
 # Whatever you do, this better be one of the entries in `LANGUAGES`.
 LANGUAGE_CODE = "en"
 TIME_ZONE = "UTC"
 DEFAULT_USER_TIME_ZONE = "America/Toronto"
 USE_I18N = True
-USE_L10N = True
 USE_TZ = True
 
 # Cookies
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/3.2/howto/static-files/
+# https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 DMOJ_RESOURCES = os.path.join(BASE_DIR, "resources")
 STATICFILES_FINDERS = (
@@ -683,6 +691,8 @@ AUTHENTICATION_BACKENDS = (
     "judge.social_auth.GitHubSecureEmailOAuth2",
     "django.contrib.auth.backends.ModelBackend",
 )
+
+REGISTRATION_OPEN = True
 
 SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.social_details",
@@ -722,6 +732,20 @@ try:
 except IOError:
     pass
 
+
+# Check settings are consistent
+DMOJ_PROBLEM_MIN_USER_POINTS_VOTE = 1
+DMOJ_PROBLEM_MAX_USER_POINTS_VOTE = 50
+assert DMOJ_PROBLEM_MIN_USER_POINTS_VOTE >= DMOJ_PROBLEM_MIN_PROBLEM_POINTS
+
+# <= 1 minute expiry is unusable UX
+assert DMOJ_EMAIL_CHANGE_EXPIRY_MINUTES > 1
+
+if DMOJ_PDF_PDFOID_URL:
+    # If a cache is configured, it must already exist and be a directory
+    assert DMOJ_PDF_PROBLEM_CACHE is None or os.path.isdir(DMOJ_PDF_PROBLEM_CACHE)
+    # If using X-Accel-Redirect, the cache directory must be configured
+    assert DMOJ_PDF_PROBLEM_INTERNAL is None or DMOJ_PDF_PROBLEM_CACHE is not None
 # Compute these values after local_settings.py is loaded
 ACE_DEFAULT_LIGHT_THEME = DMOJ_THEME_DEFAULT_ACE_THEME['light']
 ACE_DEFAULT_DARK_THEME = DMOJ_THEME_DEFAULT_ACE_THEME['dark']

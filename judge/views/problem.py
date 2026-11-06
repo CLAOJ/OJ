@@ -1,11 +1,11 @@
 import logging
 import os
 import re
-import shutil
 import zipfile
 from datetime import timedelta
 from operator import itemgetter
 from random import randrange
+from statistics import mean, median
 
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
@@ -14,7 +14,7 @@ from django.db import transaction
 from django.db.models import BooleanField, Case, CharField, Count, F, FilteredRelation, Prefetch, Q, When
 from django.db.models.functions import Coalesce
 from django.db.utils import ProgrammingError
-from django.http import Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.template.loader import get_template
 from django.urls import reverse
@@ -25,18 +25,18 @@ from django.utils.safestring import mark_safe
 from django.utils.translation import gettext as _, gettext_lazy
 from django.views.generic import CreateView, ListView, UpdateView, View
 from django.views.generic.base import TemplateResponseMixin
-from django.views.generic.detail import SingleObjectMixin
+from django.views.generic.detail import DetailView, SingleObjectMixin
 from reversion import revisions
 
 from judge.comments import CommentedDetailView
-from judge.forms import LanguageLimitFormSet, ProblemCloneForm, ProblemEditForm, ProblemSubmitForm, \
-    ProposeProblemSolutionFormSet
-from judge.models import ContestSubmission, Judge, Language, Problem, ProblemGroup, \
+from judge.forms import LanguageLimitFormSet, ProblemCloneForm, ProblemEditForm, ProblemPointsVoteForm, \
+    ProblemSubmitForm, ProposeProblemSolutionFormSet
+from judge.models import ContestSubmission, Judge, Language, Problem, ProblemGroup, ProblemPointsVote, \
     ProblemTranslation, ProblemType, RuntimeVersion, Solution, Submission, SubmissionSource
-from judge.pdf_problems import DefaultPdfMaker, HAS_PDF
 from judge.template_context import misc_config
 from judge.utils.diggpaginator import DiggPaginator
 from judge.utils.opengraph import generate_opengraph
+from judge.utils.pdfoid import PDF_RENDERING_ENABLED, render_pdf
 from judge.utils.problems import contest_attempted_ids, contest_completed_ids, hot_problems, user_attempted_ids, \
     user_completed_ids
 from judge.utils.strings import safe_float_or_none, safe_int_or_none
@@ -132,6 +132,7 @@ class ProblemSolution(SolvedProblemMixin, ProblemMixin, TitleMixin, CommentedDet
             raise Http404()
         context['solution'] = solution
         context['has_solved_problem'] = self.object.id in self.get_completed_problems()
+        context['enable_comments'] = settings.DMOJ_ENABLE_COMMENTS
         return context
 
     def get_comment_page(self):
@@ -214,7 +215,7 @@ class ProblemDetail(ProblemMixin, SolvedProblemMixin, CommentedDetailView):
 
         context['available_judges'] = Judge.objects.filter(online=True, problems=self.object)
         context['show_languages'] = self.object.allowed_languages.count() != Language.objects.count()
-        context['has_pdf_render'] = HAS_PDF
+        context['has_pdf_render'] = PDF_RENDERING_ENABLED
         context['completed_problem_ids'] = self.get_completed_problems()
         context['attempted_problems'] = self.get_attempted_problems()
 
@@ -249,6 +250,90 @@ class ProblemDetail(ProblemMixin, SolvedProblemMixin, CommentedDetailView):
                                           context['description'], 'problem')
         context['meta_description'] = self.object.summary or metadata[0]
         context['og_image'] = self.object.og_image or metadata[1]
+        context['enable_comments'] = settings.DMOJ_ENABLE_COMMENTS
+
+        context['vote_perm'] = self.object.vote_permission_for_user(user)
+        if context['vote_perm'].can_vote():
+            try:
+                context['vote'] = ProblemPointsVote.objects.get(voter=user.profile, problem=self.object)
+            except ObjectDoesNotExist:
+                context['vote'] = None
+        else:
+            context['vote'] = None
+
+        return context
+
+
+class ProblemVote(ProblemMixin, DetailView):
+    context_object_name = 'problem'
+    template_name = 'problem/vote-ajax.html'
+
+    def get_context_data(self, **kwargs):
+        if not self.object.vote_permission_for_user(self.request.user).can_vote():
+            raise Http404()
+
+        context = super().get_context_data(**kwargs)
+
+        try:
+            context['vote'] = ProblemPointsVote.objects.get(voter=self.request.profile, problem=self.object)
+        except ObjectDoesNotExist:
+            context['vote'] = None
+
+        context['max_possible_vote'] = settings.DMOJ_PROBLEM_MAX_USER_POINTS_VOTE
+        context['min_possible_vote'] = settings.DMOJ_PROBLEM_MIN_USER_POINTS_VOTE
+        return context
+
+    def post(self, request, *args, **kwargs):
+        problem = self.get_object()
+        if not problem.vote_permission_for_user(request.user).can_vote():
+            return JsonResponse({'message': _('Not allowed to vote on this problem.')}, status=403)
+
+        form = ProblemPointsVoteForm(request.POST)
+        if not form.is_valid():
+            return JsonResponse(form.errors, status=400)
+
+        with transaction.atomic():
+            # Delete any pre-existing votes.
+            ProblemPointsVote.objects.filter(voter=request.profile, problem=problem).delete()
+            vote = form.save(commit=False)
+            vote.voter = request.profile
+            vote.problem = problem
+            vote.save()
+
+        return JsonResponse({'points': vote.points})
+
+
+class DeleteProblemVote(ProblemMixin, SingleObjectMixin, View):
+    http_method_names = ['options', 'post']  # This disables GET requests, even though ProblemMixin.get exists.
+
+    def post(self, request, *args, **kwargs):
+        problem = self.get_object()
+        if not problem.vote_permission_for_user(request.user).can_vote():
+            return JsonResponse({'message': _('Not allowed to delete votes on this problem.')}, status=403)
+
+        ProblemPointsVote.objects.filter(voter=request.profile, problem=problem).delete()
+        return JsonResponse({'message': _('success')})
+
+
+class ProblemVoteStats(ProblemMixin, DetailView):
+    context_object_name = 'problem'
+    template_name = 'problem/vote-stats-ajax.html'
+
+    def get_context_data(self, **kwargs):
+        if not self.object.vote_permission_for_user(self.request.user).can_view():
+            raise Http404()
+
+        context = super().get_context_data(**kwargs)
+
+        votes = list(self.object.problem_points_votes.order_by('points').values_list('points', flat=True))
+        context['votes'] = votes
+
+        if votes:
+            context['mean'] = mean(votes)
+            context['median'] = median(votes)
+
+        context['max_possible_vote'] = settings.DMOJ_PROBLEM_MAX_USER_POINTS_VOTE
+        context['min_possible_vote'] = settings.DMOJ_PROBLEM_MIN_USER_POINTS_VOTE
         return context
 
 
@@ -261,7 +346,7 @@ class ProblemPdfView(ProblemMixin, SingleObjectMixin, View):
     languages = set(map(itemgetter(0), settings.LANGUAGES))
 
     def get(self, request, *args, **kwargs):
-        if not HAS_PDF:
+        if not PDF_RENDERING_ENABLED:
             raise Http404()
 
         language = kwargs.get('language', self.request.LANGUAGE_CODE)
@@ -269,48 +354,47 @@ class ProblemPdfView(ProblemMixin, SingleObjectMixin, View):
             raise Http404()
 
         problem = self.get_object()
-        try:
-            trans = problem.translations.get(language=language)
-        except ProblemTranslation.DoesNotExist:
-            trans = None
+        pdf_basename = '%s.%s.pdf' % (problem.code, language)
 
-        cache = os.path.join(settings.DMOJ_PDF_PROBLEM_CACHE, '%s.%s.pdf' % (problem.code, language))
+        def render_problem_pdf():
+            self.logger.info('Rendering PDF in %s: %s', language, problem.code)
 
-        if not os.path.exists(cache):
-            self.logger.info('Rendering: %s.%s.pdf', problem.code, language)
-            with DefaultPdfMaker() as maker, translation.override(language):
-                problem_name = problem.name if trans is None else trans.name
-                maker.html = get_template('problem/raw.html').render({
-                    'problem': problem,
-                    'problem_name': problem_name,
-                    'description': problem.description if trans is None else trans.description,
-                    'url': request.build_absolute_uri(),
-                    'math_engine': maker.math_engine,
-                }).replace('"//', '"https://').replace("'//", "'https://")
-                maker.title = problem_name
+            with translation.override(language):
+                try:
+                    trans = problem.translations.get(language=language)
+                except ProblemTranslation.DoesNotExist:
+                    trans = None
 
-                assets = ['style.css']
-                if maker.math_engine == 'jax':
-                    assets.append('mathjax_config.js')
-                for file in assets:
-                    maker.load(file, os.path.join(settings.DMOJ_RESOURCES, file))
-                maker.make()
-                if not maker.success:
-                    self.logger.error('Failed to render PDF for %s', problem.code)
-                    return HttpResponse(maker.log, status=500, content_type='text/plain')
-                shutil.move(maker.pdffile, cache)
+                problem_name = trans.name if trans else problem.name
+                return render_pdf(
+                    html=get_template('problem/raw.html').render({
+                        'problem': problem,
+                        'problem_name': problem_name,
+                        'description': trans.description if trans else problem.description,
+                        'url': request.build_absolute_uri(),
+                    }).replace('"//', '"https://').replace("'//", "'https://"),
+                    title=problem_name,
+                )
 
         response = HttpResponse()
-
-        if hasattr(settings, 'DMOJ_PDF_PROBLEM_INTERNAL'):
-            url_path = '%s/%s.%s.pdf' % (settings.DMOJ_PDF_PROBLEM_INTERNAL, problem.code, language)
-        else:
-            url_path = None
-
-        add_file_response(request, response, url_path, cache)
-
         response['Content-Type'] = 'application/pdf'
-        response['Content-Disposition'] = 'inline; filename=%s.%s.pdf' % (problem.code, language)
+        response['Content-Disposition'] = f'inline; filename={pdf_basename}'
+
+        if settings.DMOJ_PDF_PROBLEM_CACHE:
+            pdf_filename = os.path.join(settings.DMOJ_PDF_PROBLEM_CACHE, pdf_basename)
+            if not os.path.exists(pdf_filename):
+                with open(pdf_filename, 'wb') as f:
+                    f.write(render_problem_pdf())
+
+            if settings.DMOJ_PDF_PROBLEM_INTERNAL:
+                url_path = f'{settings.DMOJ_PDF_PROBLEM_INTERNAL}/{pdf_basename}'
+            else:
+                url_path = None
+
+            add_file_response(request, response, url_path, pdf_filename)
+        else:
+            response.content = render_problem_pdf()
+
         return response
 
 
@@ -329,12 +413,9 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
     def get_paginator(self, queryset, per_page, orphans=0,
                       allow_empty_first_page=True, **kwargs):
         paginator = DiggPaginator(queryset, per_page, body=6, padding=2, orphans=orphans,
+                                  count=queryset.values('pk').count() if not self.in_contest else None,
                                   allow_empty_first_page=allow_empty_first_page, **kwargs)
         if not self.in_contest:
-            # Get the number of pages and then add in this magic.
-            # noinspection PyStatementEffect
-            paginator.num_pages
-
             queryset = queryset.add_i18n_name(self.request.LANGUAGE_CODE)
             sort_key = self.order.lstrip('-')
             if sort_key in self.sql_sort:
@@ -406,20 +487,24 @@ class ProblemList(QueryStringSortMixin, TitleMixin, SolvedProblemMixin, ListView
                                    'problem__group__full_name', 'points', 'partial', 'user_count')]
 
     def get_filter(self):
-        filter = Q(is_public=True) & Q(is_organization_private=False)
+        filter = Q(is_public=True)
+        if not self.request.user.has_perm('judge.see_organization_problem'):
+            org_filter = Q(is_organization_private=False)
+            if self.profile is not None:
+                org_filter |= Q(organizations__in=self.profile.organizations.all())
+            filter &= org_filter
         if self.profile is not None:
-            filter |= Q(authors=self.profile)
-            filter |= Q(curators=self.profile)
-            filter |= Q(testers=self.profile)
+            filter = Problem.q_add_author_curator_tester(filter, self.profile)
         return filter
 
     def get_normal_queryset(self):
-        filter = self.get_filter()
-        queryset = Problem.objects.filter(filter).select_related('group').defer('description', 'summary')
+        queryset = Problem.objects.filter(self.get_filter()).select_related('group').defer('description', 'summary')
 
         if self.profile is not None and self.hide_solved:
-            queryset = queryset.exclude(id__in=Submission.objects.filter(user=self.profile, points=F('problem__points'))
-                                        .values_list('problem__id', flat=True))
+            queryset = queryset.exclude(id__in=Submission.objects
+                                        .filter(user=self.profile, is_archived=False,
+                                                result='AC', case_points__gte=F('case_total'))
+                                        .values_list('problem_id', flat=True))
         if self.show_types:
             queryset = queryset.prefetch_related('types')
         queryset = queryset.annotate(has_public_editorial=Case(
@@ -676,12 +761,16 @@ class ProblemSubmit(LoginRequiredMixin, ProblemMixin, TitleMixin, SingleObjectFo
         return reverse('submission_status', args=(self.new_submission.id,))
 
     def form_valid(self, form):
-        if (
-            not self.request.user.has_perm('judge.spam_submission') and
-            Submission.objects.filter(user=self.request.profile, rejudged_date__isnull=True)
-                              .exclude(status__in=['D', 'IE', 'CE', 'AB']).count() >= settings.CLAOJ_SUBMISSION_LIMIT
-        ):
-            return HttpResponse(format_html('<h1>{0}</h1>', _('You submitted too many submissions.')), status=429)
+        if not self.request.user.has_perm('judge.spam_submission'):
+            if (
+                Submission.objects.filter(user=self.request.profile, rejudged_date__isnull=True)
+                    .exclude(status__in=['D', 'IE', 'CE', 'AB']).count() >= settings.DMOJ_SUBMISSION_LIMIT
+            ) or (
+                Submission.objects.filter(user=self.request.profile,
+                                          date__gte=timezone.now() - settings.DMOJ_SUBMISSION_RATELIMIT_TIMEFRAME)
+                    .exclude(status__in=['IE', 'CE']).count() >= settings.DMOJ_SUBMISSION_RATELIMIT
+            ):
+                return HttpResponse(format_html('<h1>{0}</h1>', _('You submitted too many submissions.')), status=429)
         if not self.object.allowed_languages.filter(id=form.cleaned_data['language'].id).exists():
             raise PermissionDenied()
         if not self.request.user.is_superuser and self.object.banned_users.filter(id=self.request.profile.id).exists():

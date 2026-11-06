@@ -1,19 +1,23 @@
 import errno
 import os
+from typing import Optional
 
 from django.conf import settings
-from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.cache.utils import make_template_fragment_key
 from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from .caching import finished_submission
-from .models import BlogPost, Comment, Contest, ContestAnnouncement, ContestSubmission, EFFECTIVE_MATH_ENGINES, \
-    Judge, Language, License, MiscConfig, Organization, Problem, Profile, Submission, WebAuthnCredential
+from .models import BlogPost, Comment, Contest, ContestAnnouncement, ContestProblem, ContestSubmission, \
+    EFFECTIVE_MATH_ENGINES, Judge, Language, License, MiscConfig, Organization, Problem, Profile, Submission, \
+    WebAuthnCredential
 
 
-def get_pdf_path(basename):
+def get_pdf_path(basename: str) -> Optional[str]:
+    if not settings.DMOJ_PDF_PROBLEM_CACHE:
+        return None
+
     return os.path.join(settings.DMOJ_PDF_PROBLEM_CACHE, basename)
 
 
@@ -42,7 +46,9 @@ def problem_update(sender, instance, **kwargs):
     cache.delete_many(['generated-meta-problem:%s:%d' % (lang, instance.id) for lang, _ in settings.LANGUAGES])
 
     for lang, _ in settings.LANGUAGES:
-        unlink_if_exists(get_pdf_path('%s.%s.pdf' % (instance.code, lang)))
+        cached_pdf_filename = get_pdf_path('%s.%s.pdf' % (instance.code, lang))
+        if cached_pdf_filename is not None:
+            unlink_if_exists(cached_pdf_filename)
 
 
 @receiver(post_save, sender=Profile)
@@ -70,6 +76,13 @@ def contest_update(sender, instance, **kwargs):
     cache.delete_many(['generated-meta-contest:%d' % instance.id] +
                       [make_template_fragment_key('contest_html', (instance.id, engine))
                        for engine in EFFECTIVE_MATH_ENGINES])
+
+
+@receiver(post_delete, sender=ContestProblem)
+def contest_problem_delete(sender, instance, **kwargs):
+    # `contest_object` is the `Contest` object indirectly associated with the `Submission` object
+    # `contest` is the `ContestSubmission` object associated with the `Submission` object
+    Submission.objects.filter(contest_object=instance.contest, contest__isnull=True).update(contest_object=None)
 
 
 @receiver(post_save, sender=License)
@@ -113,6 +126,16 @@ def submission_delete(sender, instance, **kwargs):
     instance.problem.update_stats()
 
 
+@receiver(post_save, sender=Submission)
+def submission_update(sender, instance, update_fields, **kwargs):
+    if update_fields and 'is_archived' in update_fields:
+        finished_submission(instance)
+        instance.user._updating_stats_only = True
+        instance.user.calculate_points()
+        instance.problem._updating_stats_only = True
+        instance.problem.update_stats()
+
+
 @receiver(post_delete, sender=ContestSubmission)
 def contest_submission_delete(sender, instance, **kwargs):
     participation = instance.participation
@@ -126,35 +149,14 @@ def organization_update(sender, instance, **kwargs):
                        for engine in EFFECTIVE_MATH_ENGINES])
 
 
-_misc_config_i18n = [code for code, _ in settings.LANGUAGES]
-_misc_config_i18n.append('')
-
-
-def misc_config_cache_delete(key):
-    cache.delete_many(['misc_config:%s:%s:%s' % (domain, lang, key.split('.')[0])
-                       for lang in _misc_config_i18n
-                       for domain in Site.objects.values_list('domain', flat=True)])
-
-
-@receiver(pre_save, sender=MiscConfig)
-def misc_config_pre_save(sender, instance, **kwargs):
-    try:
-        old_key = MiscConfig.objects.filter(id=instance.id).values_list('key').get()[0]
-    except MiscConfig.DoesNotExist:
-        old_key = None
-    instance._old_key = old_key
-
-
 @receiver(post_save, sender=MiscConfig)
 def misc_config_update(sender, instance, **kwargs):
-    misc_config_cache_delete(instance.key)
-    if instance._old_key is not None and instance._old_key != instance.key:
-        misc_config_cache_delete(instance._old_key)
+    cache.delete('misc_config')
 
 
 @receiver(post_delete, sender=MiscConfig)
 def misc_config_delete(sender, instance, **kwargs):
-    misc_config_cache_delete(instance.key)
+    cache.delete('misc_config')
 
 
 @receiver(post_save, sender=ContestSubmission)

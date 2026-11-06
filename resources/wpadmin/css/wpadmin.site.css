@@ -6,18 +6,6 @@
     line-height: unset !important;
 }
 
-.wmd-wrapper {
-    padding-top: 2em;
-}
-
-.wmd-wrapper ul.wmd-button-row {
-    margin-left: 0;
-}
-
-.wmd-input {
-    width: 100% !important;
-}
-
 #content .content-description h1,
 #content .content-description h2,
 #content .content-description h3,
@@ -58,13 +46,12 @@ select#id_tags.django-select2 {
     width: 20em;
 }
 
+.select2-container--dmoj {
+    min-width: 20em;
+}
+
 @media (max-width: 780px) {
     #content .vLargeTextField {
         max-width: unset;
     }
-}
-
-.dmmd-preview-update {
-  position: sticky;
-  top: 38px;
 }

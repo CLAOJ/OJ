@@ -34,14 +34,9 @@ def contest_completed_ids(participation):
     key = "contest_complete:%d" % participation.id
     result = cache.get(key)
     if result is None:
-        result = set(
-            participation.submissions.filter(
-                submission__result="AC", points=F("problem__points"),
-            )
-            .values_list("problem__problem__id", flat=True)
-            .distinct(),
-        )
-        cache.set(key, result, 300)
+        result = set(participation.submissions.filter(submission__result='AC', points__gte=F('problem__points'))
+                     .values_list('problem__problem_id', flat=True).distinct())
+        cache.set(key, result, 86400)
     return result
 
 
@@ -49,14 +44,10 @@ def user_completed_ids(profile):
     key = "user_complete:%d" % profile.id
     result = cache.get(key)
     if result is None:
-        result = set(
-            Submission.objects.filter(
-                user=profile, result="AC", points=F("problem__points"),
-            )
-            .values_list("problem_id", flat=True)
-            .distinct(),
-        )
-        cache.set(key, result, 300)
+        result = set(Submission.objects
+                     .filter(user=profile, is_archived=False, result='AC', case_points__gte=F('case_total'))
+                     .values_list('problem_id', flat=True).distinct())
+        cache.set(key, result, 86400)
     return result
 
 
@@ -88,7 +79,7 @@ def _get_result_data(results):
     return {
         "categories": [
             # Using gettext_noop here since this will be tacked into the cache, so it must be language neutral.
-            # The caller, SubmissionList.get_result_data will run ugettext on the name.
+            # The caller, SubmissionList.get_result_data will run gettext on the name.
             {"code": "AC", "name": gettext_noop("Accepted"), "count": results["AC"]},
             {"code": "WA", "name": gettext_noop("Wrong"), "count": results["WA"]},
             {"code": "TLE", "name": gettext_noop("Timeout"), "count": results["TLE"]},

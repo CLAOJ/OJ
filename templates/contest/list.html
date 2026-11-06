@@ -14,8 +14,8 @@
             $('.contest-tag').find('a[data-featherlight]').featherlight();
 
             $('.join-warning').click(function () {
-                return confirm("{{ _('Are you sure you want to join?') }}\n" +
-                    "{{ _('Joining a contest for the first time starts your timer, after which it becomes unstoppable.') }}");
+                return confirm({{ _('Are you sure you want to join?')|htmltojs }} + '\n' +
+                    {{ _('Joining a contest for the first time starts your timer, after which it becomes unstoppable.')|htmltojs }});
             });
 
             {% if hide_private_contests is not none %}
@@ -261,16 +261,16 @@
         {% endif %}
         <br>
 
-        <h4 id="past-contests">{{ _('Past Contests') }}</h4>
-        {% if page_obj or search_query %}  
+        <h4 id="past-contests">{{ _('Past contests') }}</h4>
+        {% if page_obj or search_query %}
             <div class="top-pagination-bar">
                 {% include "list-pages.html" %}
-                <div style="display: flex; align-items: center;">
-                    <form id="search-form" name="form" action="" method="get">
+                <form id="search-form" name="form" action="" method="get">
+                    <div>
                         <input id="search" type="text" name="search" value="{{ search_query or '' }}"
-                            placeholder="{{ _('Search contest...') }}">
-                    </form>
-                </div>
+                            placeholder="{{ _('Search contests...') }}">
+                    </div>
+                </form>
             </div>
         {% endif %}
         {% if past_contests %}

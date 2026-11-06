@@ -37,7 +37,6 @@
             {% endif %}
         {% endwith %}
         {{ solution.content|markdown('solution', MATH_ENGINE)|reference|str|safe }}
-
     	{% with pdf_url=solution.pdf_url %}
         	{% if pdf_url %}
             		<object id="pdfContainer" data="{{ pdf_url }}" type="application/pdf" height="1000" style="width: 100%;" ></object>
@@ -45,13 +44,14 @@
         	{% endif %}
     	{% endwith %}
     </div>
-    <hr>
-    {% include "comments/list.html" %}
+    {% if enable_comments %}
+        <hr>
+        {% include "comments/list.html" %}
+    {% endif %}
 {% endblock %}
 
 {% block bodyend %}
     {% if REQUIRE_JAX %}
         {% include "mathjax-load.html" %}
     {% endif %}
-    {% include "comments/math.html" %}
 {% endblock %}
