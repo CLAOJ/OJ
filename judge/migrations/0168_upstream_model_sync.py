@@ -45,8 +45,10 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='contest',
             name='classes',
-            field=models.ManyToManyField(to='judge.Class', blank=True, verbose_name='classes',
-                                          help_text='If organization private, only these classes may see the contest.'),
+            field=models.ManyToManyField(
+                to='judge.Class', blank=True, verbose_name='classes',
+                help_text='If organization private, only these classes may see the contest.',
+            ),
         ),
         migrations.AddField(
             model_name='organizationrequest',
@@ -57,9 +59,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='contest',
             name='view_contest_submissions',
-            field=models.ManyToManyField(to='judge.Profile', blank=True, related_name='view_contest_submissions',
-                                          verbose_name='can see contest submissions',
-                                          help_text='These users will be able to see in-contest submissions.'),
+            field=models.ManyToManyField(
+                to='judge.Profile', blank=True, related_name='view_contest_submissions',
+                verbose_name='can see contest submissions',
+                help_text='These users will be able to see in-contest submissions.',
+            ),
         ),
         migrations.AddField(
             model_name='contest',
@@ -69,9 +73,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='contest',
             name='join_organizations',
-            field=models.ManyToManyField(to='judge.Organization', blank=True, related_name='join_only_contests',
-                                          verbose_name='join organizations',
-                                          help_text='If non-empty, only these organizations may join the contest.'),
+            field=models.ManyToManyField(
+                to='judge.Organization', blank=True, related_name='join_only_contests',
+                verbose_name='join organizations',
+                help_text='If non-empty, only these organizations may join the contest.',
+            ),
         ),
         migrations.AddField(
             model_name='contest',
@@ -88,10 +94,14 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='contest',
             name='spectators',
-            field=models.ManyToManyField(to='judge.Profile', blank=True, related_name='spectated_contests',
-                                          verbose_name='spectators',
-                                          help_text='These users will be able to spectate the contest, '
-                                                    'but not see the problems ahead of time.'),
+            field=models.ManyToManyField(
+                to='judge.Profile', blank=True, related_name='spectated_contests',
+                verbose_name='spectators',
+                help_text=(
+                    'These users will be able to spectate the contest, '
+                    'but not see the problems ahead of time.'
+                ),
+            ),
         ),
         migrations.AddField(
             model_name='profile',

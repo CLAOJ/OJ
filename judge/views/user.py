@@ -35,7 +35,10 @@ from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
 from reversion import revisions
 
-from judge.forms import CustomAuthenticationForm, DownloadDataForm, EmailChangeForm, ProfileForm, UserBanForm, UserForm, newsletter_id
+from judge.forms import (
+    CustomAuthenticationForm, DownloadDataForm, EmailChangeForm, ProfileForm, UserBanForm, UserForm,
+    newsletter_id,
+)
 from judge.models import BlogPost, Organization, Profile, Submission
 from judge.performance_points import get_pp_breakdown
 from judge.ratings import rating_class, rating_progress

@@ -94,9 +94,12 @@ class OrganizationAdmin(VersionAdmin):
         for org in queryset:
             org.calculate_points()
             count += 1
-        self.message_user(request, ngettext('%d organization has scores recalculated.',
-                                             '%d organizations have scores recalculated.',
-                                             count) % count)
+        message = ngettext(
+            '%d organization has scores recalculated.',
+            '%d organizations have scores recalculated.',
+            count,
+        ) % count
+        self.message_user(request, message)
     recalculate_points.short_description = _('Recalculate scores')
 
 

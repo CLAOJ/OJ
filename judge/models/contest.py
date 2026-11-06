@@ -79,10 +79,12 @@ class Contest(models.Model):
     testers = models.ManyToManyField(Profile, help_text=_('These users will be able to view the contest, '
                                                           'but not edit it.'),
                                      blank=True, related_name='testers+')
-    tester_see_scoreboard = models.BooleanField(verbose_name=_('testers see scoreboard'), default=False,
-                                                 help_text=_('If testers can see the scoreboard.'))
-    tester_see_submissions = models.BooleanField(verbose_name=_('testers see submissions'), default=False,
-                                                 help_text=_('If testers can see in-contest submissions.'))
+    tester_see_scoreboard = models.BooleanField(
+        verbose_name=_('testers see scoreboard'), default=False,
+        help_text=_('If testers can see the scoreboard.'))
+    tester_see_submissions = models.BooleanField(
+        verbose_name=_('testers see submissions'), default=False,
+        help_text=_('If testers can see in-contest submissions.'))
     spectators = models.ManyToManyField(Profile, verbose_name=_('spectators'), blank=True,
                                         related_name='spectated_contests',
                                         help_text=_('These users will be able to spectate the contest, '

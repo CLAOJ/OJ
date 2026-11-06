@@ -27,7 +27,7 @@ UPDATE_RATE_LIMIT = 5
 UPDATE_RATE_TIME = 0.5
 SubmissionData = namedtuple(
     'SubmissionData',
-'time memory short_circuit pretests_only contest_no attempt_no user_id user_notes file_only file_size_limit'
+    'time memory short_circuit pretests_only contest_no attempt_no user_id user_notes file_only file_size_limit',
 )
 
 

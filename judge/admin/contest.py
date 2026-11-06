@@ -14,7 +14,8 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from django.views.decorators.http import require_POST
 from reversion.admin import VersionAdmin
 
-from judge.models import Class, Contest, ContestAnnouncement, ContestProblem, ContestSubmission, Profile, Rating, Submission
+from judge.models import Contest, ContestAnnouncement, ContestProblem, ContestSubmission, Profile, Rating, \
+    Submission
 from judge.ratings import rate_contest
 from judge.utils.views import NoBatchDeleteMixin
 from judge.widgets import AdminAceWidget, AdminHeavySelect2MultipleWidget, AdminHeavySelect2Widget, \
@@ -305,6 +306,7 @@ class ContestAdmin(NoBatchDeleteMixin, SortableAdminBase, VersionAdmin):
         announcement = get_object_or_404(ContestAnnouncement, id=announcement_id)
         announcement.send()
         return HttpResponseRedirect(reverse('admin:judge_contest_change', args=(contest_id,)))
+
     def rate_all_view(self, request):
         if not request.user.has_perm('judge.contest_rating'):
             raise PermissionDenied()
