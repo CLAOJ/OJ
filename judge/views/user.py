@@ -204,7 +204,7 @@ class UserAboutPage(UserPage):
         user_timezone = settings.DEFAULT_USER_TIME_ZONE
         if self.request is not None and self.request.profile is not None:
             user_timezone = user_timezone or self.request.profile.timezone
-        timezone_offset = pytz.timezone(user_timezone).utcoffset(timezone.now()).seconds
+        timezone_offset = pytz.timezone(user_timezone).utcoffset(timezone.now().replace(tzinfo=None)).seconds
 
         submissions = (
             self.object.submission_set
