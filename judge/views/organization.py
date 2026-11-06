@@ -96,7 +96,7 @@ class OrganizationList(TitleMixin, ListView):
 
     def get_queryset(self):
         return super(OrganizationList, self).get_queryset().filter(is_unlisted=False) \
-            .annotate(member_count=Count('member')).order_by('name')
+            .order_by('name')
 
 
 class OrganizationUsers(QueryStringSortMixin, DiggPaginatorMixin, BaseOrganizationListView):
