@@ -5,6 +5,14 @@
     font-weight: bold !important;
 }
 
+.tst24 a, .tst24 {
+    color: #FB9EC6 !important;
+}
+
+.tst24 a::before {
+    content: "👑";
+}
+
 .banned a, .banned {
     color: $color_primary100 !important;
     font-weight: normal !important;

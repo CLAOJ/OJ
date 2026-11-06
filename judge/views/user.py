@@ -624,7 +624,10 @@ class CustomPasswordResetView(PasswordResetView):
     template_name = 'registration/password_reset.html'
     html_email_template_name = 'registration/password_reset_email.html'
     email_template_name = 'registration/password_reset_email.txt'
-    extra_email_context = {'site_admin_email': settings.SITE_ADMIN_EMAIL}
+    extra_email_context = {
+        'site_admin_email': settings.SITE_ADMIN_EMAIL,
+        'protocol': 'https',
+    }
 
     def post(self, request, *args, **kwargs):
         key = f'pwreset!{request.META["REMOTE_ADDR"]}'
