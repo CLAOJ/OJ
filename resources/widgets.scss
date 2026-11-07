@@ -455,17 +455,17 @@ a.close {
 
 .sidebox h3 {
     margin: 0 -5px;
-    background: $color_primary75;
+    background: $color_sidebox_header_bg;
     border-radius: $widget_border_radius $widget_border_radius 0 0;
     border-bottom: 1px solid $color_primary25;
-    color: $color_primary0;
+    color: $color_sidebox_header_text;
     padding: 10px 12px;
     font-weight: 600;
     font-size: 1.3em;
 }
 
 .sidebox h3 .fa, .sidebox h3 .fa-solid {
-    color: $color_primary0;
+    color: $color_sidebox_header_text;
     float: left;
     margin: 0.1em 0.4em 0 0;
 }

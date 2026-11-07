@@ -26,6 +26,10 @@ $color_header_text: $color_primary75;
 $color_header_bg: $color_primary5;
 $color_header_border: $color_primary25;
 
+// Sidebox titles use the navbar colours (always a dark bar).
+$color_sidebox_header_bg: $color_primary5;
+$color_sidebox_header_text: $color_primary75;
+
 $color_pageBg: #1c2429;    // #212121 because some elements should be darker than pageBg
 
 // custom one-off colours
