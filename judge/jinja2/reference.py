@@ -172,10 +172,10 @@ def runtime_versions(versions):
 @registry.filter(name='absolutify')
 def absolute_links(text, url):
     tree = lxml_tree.fromstring(text)
-    for anchor in tree.xpath('.//a'):
-        href = anchor.get('href')
-        if href:
-            anchor.set('href', urljoin(url, href))
+    # pdfoid opens the page as a local file, so relative image paths must be made absolute too.
+    for element, attr in [(a, 'href') for a in tree.xpath('.//a[@href]')] + \
+                         [(img, 'src') for img in tree.xpath('.//img[@src]')]:
+        element.set(attr, urljoin(url, element.get(attr)))
     return tree
 
 
