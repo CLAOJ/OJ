@@ -96,7 +96,8 @@ def markdown(text, style, math_engine=None, lazy_load=False, strip_paragraphs=Fa
     else:
         safe_mode = None
 
-    extras = ['latex', 'spoiler', 'fenced-code-blocks', 'cuddled-lists', 'tables', 'strike']
+    # vnoj-latex keeps ~...~ and $$...$$ untouched for MathJax; markdown2's own 'latex' converts $...$ to MathML.
+    extras = ['vnoj-latex', 'spoiler', 'fenced-code-blocks', 'cuddled-lists', 'tables', 'strike']
     if styles.get('nofollow', True):
         extras.append('nofollow')
 

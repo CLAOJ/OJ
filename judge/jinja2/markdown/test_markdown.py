@@ -125,6 +125,10 @@ class TestMarkdown(SimpleTestCase):
         self.assertHTMLEqual(markdown('<script>void(0)</script>', self.UNBLEACHED_STYLE),
                              '<script>void(0)</script>')
 
+    def test_tilde_math_untouched(self):
+        self.assertHTMLEqual(markdown(r'Cho ~F_i * a_i~ va ~\{x\}~', self.BLEACHED_STYLE),
+                             r'<p>Cho ~F_i * a_i~ va ~\{x\}~</p>')
+
     def test_post_process(self):
         self.assertHTMLEqual(markdown('<img src="test.png">', self.UNBLEACHED_STYLE, lazy_load=True),
                              '<p><noscript><img src="test.png"></noscript>'

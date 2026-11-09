@@ -35,8 +35,7 @@ celery
 ansi2html @ git+https://github.com/DMOJ/ansi2html.git
 sqlparse
 lupa
-markdown2 @ git+https://github.com/VNOI-Admin/python-markdown2.git
-latex2mathml
+markdown2 @ git+https://github.com/VNOI-Admin/python-markdown2.git@f9bd2e8c205f67f6ce9a298aea9cfebbbc31fdf0
 netaddr
 webauthn<1
 bleach[css]
