@@ -349,14 +349,21 @@
 
             var $total = $('#id_cases-TOTAL_FORMS');
 
-            $('a#add-case-row').click(function () {
-                var $tr;
-                $table.find('tbody:first').append($tr = $($table.find('.extra-row-body').html()
-                    .replace(/__prefix__/g, $total.val())));
+            function add_case_row() {
+                var template = $table.find('.extra-row-body').html();
+                if (!template)
+                    return false;
+                var $tr = $(template.replace(/__prefix__/g, $total.val()));
+                $table.find('tbody:first').append($tr);
                 $tr.find('.type-column select option[value="C"]').attr('selected', true);
                 $total.val(parseInt($total.val()) + 1);
                 $table.trigger('add-row', [$tr]);
                 window.scrollBy(0, $tr.height());
+                return true;
+            }
+
+            $('a#add-case-row').click(function () {
+                add_case_row();
                 return false;
             });
 
@@ -380,7 +387,7 @@
 
             $('a#add-case-first-row').click(function () {
                 var cntRow = parseInt($total.val());
-                $('a#add-case-row').click();
+                add_case_row();
                 if (cntRow == parseInt($total.val()))
                     return false;
                 var newIndex = -1;
@@ -392,7 +399,7 @@
 
             $('#case-table tbody').on("click", ".add-case-row-below", function (event) {
                 var cntRow = parseInt($total.val());
-                $('a#add-case-row').click();
+                add_case_row();
                 if (cntRow == parseInt($total.val()))
                     return false;
                 var $current_row = $(this).parent().parent();
@@ -429,8 +436,14 @@
                 }
                 n_test = inFiles.length;
                 // add boxes
-                while ($total.val() < n_test) {
-                    $('a#add-case-row').click();
+                var tries = 0;
+                while ($total.val() < n_test && tries++ < 1000) {
+                    if (!add_case_row())
+                        break;
+                }
+                if ($total.val() < n_test) {
+                    alert("{{ _('Could not add test case rows. Please add them manually and save.') }}");
+                    return false;
                 }
                 // natsort
                 var collator = new Intl.Collator(undefined, {numeric: true, sensitivity: 'base'});
