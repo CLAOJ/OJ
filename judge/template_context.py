@@ -6,7 +6,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.utils.functional import SimpleLazyObject, new_method_proxy
 
 from judge import event_poster as event
-from judge.utils.caniuse import CanIUse, SUPPORT
+from judge.utils.caniuse import CanIUse
 from .models import NavigationBar, Profile
 
 
@@ -131,8 +131,9 @@ def math_setting(request):
         engine = request.profile.math_engine
     else:
         engine = settings.MATHOID_DEFAULT_TYPE
+    # markdown2's vnoj-latex extra leaves TeX for MathJax; the server-side
+    # MathML/SVG renderer is gone, so "auto" must use MathJax on every browser.
+    # Firefox and Safari report MathML support and used to get raw $...$ here.
     if engine == "auto":
-        engine = (
-            "mml" if bool(settings.MATHOID_URL) and caniuse.mathml == SUPPORT else "jax"
-        )
+        engine = "jax"
     return {"MATH_ENGINE": engine, "REQUIRE_JAX": engine == "jax", "caniuse": caniuse}
