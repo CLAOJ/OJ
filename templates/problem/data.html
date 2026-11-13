@@ -478,6 +478,22 @@
                 }
             });
 
+            var $controls = $('#column-visible');
+            var problem = $controls.attr('data-problem');
+            $controls.find('input').change(function () {
+                var $this = $(this), suffix = $this.attr('data-suffix'), checked = $this.is(':checked');
+                $table.find('.' + suffix.replace(/_/g, '-')).toggle(checked);
+                localStorage.setItem('data-visible:' + problem + ':' + suffix, checked ? '1' : '0');
+            }).each(function () {
+                var $this = $(this), suffix = $this.attr('data-suffix');
+                var filled = localStorage.getItem('data-visible:' + problem + ':' + suffix);
+                if (filled !== null)
+                    filled = filled == '1';
+                else
+                    filled = true;
+                $this.prop('checked', filled).trigger('change');
+            });
+
             $('input#delete-all').change(function() {
                 if (this.checked) {
                     $("input[name$='DELETE']").attr('checked', true);
@@ -726,7 +742,12 @@
                     </td>
                     <td>{{ form.points.errors }}{{ form.points }}</td>
                     <td>{{ form.is_pretest.errors }}{{ form.is_pretest }}</td>
-                     <!-- <td class="generator-args">{{ form.generator_args.errors }}{{ form.generator_args }}
+                    <td class="output-prefix">{{ form.output_prefix.errors }}{{ form.output_prefix }}</td>
+                    <td class="output-limit">{{ form.output_limit.errors }}{{ form.output_limit }}</td>
+                    <td class="checker">
+                        {{ form.checker.errors }}{{ form.checker }}{{ form.checker_args.errors }}{{ form.checker_args }}
+                    </td>
+                    <td class="generator-args">{{ form.generator_args.errors }}{{ form.generator_args }}
                         <a href="javascript:void(0)" class="edit-generator-args">
                             <i class="fa fa-pencil"></i>
                             {{ _('Edit') }}
@@ -737,7 +758,7 @@
                             <i class="fa fa-pencil"></i>
                             {{ _('Edit') }}
                         </a>
-                    </td> -->
+                    </td>
                     {% if cases_formset.can_delete %}
                         <td>{{ form.DELETE }}</td>
                     {% endif %}
