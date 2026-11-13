@@ -430,7 +430,8 @@ class ContestAnnounce(ContestMixin, TitleMixin, SingleObjectFormView):
     def get_object(self, queryset=None):
         contest = super().get_object(queryset)
         # Raise from here so ContestMixin.dispatch can turn private contests into a 403 page.
-        if not self.can_edit:
+        # self.object is not set yet at this point, so check the contest directly.
+        if not contest.is_editable_by(self.request.user):
             raise PermissionDenied()
         return contest
 
