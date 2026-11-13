@@ -648,7 +648,6 @@
             {{ (_('Test cases have been filled automatically and **not saved yet**!'))|markdown('default', strip_paragraphs=True) }}
             <br>
             {{ _('Please modify the table below if needed and press the `Apply` button to save!') }}</div>
-        <table class="table">{{ data_form.as_table() }}</table>
         <div id="column-visible" data-problem="{{ problem.code }}">
             <strong>{{ _('Show columns:') }}</strong>
             <label>
@@ -738,7 +737,7 @@
                             <i class="fa fa-pencil"></i>
                             {{ _('Edit') }}
                         </a>
-                    </td>
+                    </td> -->
                     {% if cases_formset.can_delete %}
                         <td>{{ form.DELETE }}</td>
                     {% endif %}
