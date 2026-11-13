@@ -427,11 +427,12 @@ class ContestAnnounce(ContestMixin, TitleMixin, SingleObjectFormView):
 
         return HttpResponseRedirect(reverse('contest_view', args=(contest.key,)))
 
-    def dispatch(self, request, *args, **kwargs):
-        self.object = self.get_object()
+    def get_object(self, queryset=None):
+        contest = super().get_object(queryset)
+        # Raise from here so ContestMixin.dispatch can turn private contests into a 403 page.
         if not self.can_edit:
             raise PermissionDenied()
-        return super().dispatch(request, *args, **kwargs)
+        return contest
 
 
 class ContestAccessDenied(Exception):
