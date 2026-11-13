@@ -55,7 +55,7 @@ class WebAuthnInline(admin.TabularInline):
 
 class ProfileAdmin(NoBatchDeleteMixin, VersionAdmin):
     fields = ('user', 'display_rank', 'about', 'organizations', 'timezone', 'language', 'ace_theme',
-              'math_engine', 'last_access', 'ip', 'mute', 'is_unlisted', 'notes', 'is_totp_enabled', 'user_script',
+              'last_access', 'ip', 'mute', 'is_unlisted', 'notes', 'is_totp_enabled', 'user_script',
               'ban_reason', 'username_display_override', 'current_contest')
     readonly_fields = ('user',)
     list_display = ('admin_user_admin', 'email', 'is_totp_enabled', 'timezone_full',

@@ -6,7 +6,6 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.utils.functional import SimpleLazyObject, new_method_proxy
 
 from judge import event_poster as event
-from judge.utils.caniuse import CanIUse
 from .models import NavigationBar, Profile
 
 
@@ -124,8 +123,6 @@ def site_theme(request):
 
 
 def math_setting(request):
-    caniuse = CanIUse(request.headers.get('user-agent', ''))
-
     # Middleware populating `profile` may not have loaded at this point if we're called from an error context.
     if hasattr(request.user, 'profile'):
         engine = request.profile.math_engine
@@ -133,7 +130,6 @@ def math_setting(request):
         engine = settings.MATHOID_DEFAULT_TYPE
     # markdown2's vnoj-latex extra leaves TeX for MathJax; the server-side
     # MathML/SVG renderer is gone, so auto/mml/svg must all use MathJax.
-    # Firefox and Safari report MathML support and used to get raw $...$ here.
     if engine in ("auto", "mml", "svg"):
         engine = "jax"
-    return {"MATH_ENGINE": engine, "REQUIRE_JAX": engine == "jax", "caniuse": caniuse}
+    return {"MATH_ENGINE": engine, "REQUIRE_JAX": engine == "jax"}

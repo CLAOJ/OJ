@@ -67,11 +67,6 @@ class ProfileForm(ModelForm):
             'site_theme': Select2Widget(attrs={'style': 'width:200px'}),
         }
 
-        has_math_config = bool(settings.MATHOID_URL)
-        if has_math_config:
-            fields.append('math_engine')
-            widgets['math_engine'] = Select2Widget(attrs={'style': 'width:200px'})
-
         widgets['about'] = MartorWidget(attrs={'data-markdownfy-url': reverse_lazy('profile_preview')})
 
     def clean_about(self):

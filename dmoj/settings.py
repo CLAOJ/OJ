@@ -174,18 +174,7 @@ DMOJ_ENABLE_SOCIAL = True
 MARKDOWN_STYLES = {}
 MARKDOWN_DEFAULT_STYLE = {}
 
-MATHOID_URL = False
-MATHOID_GZIP = False
-MATHOID_MML_CACHE = None
-MATHOID_CSS_CACHE = "default"
 MATHOID_DEFAULT_TYPE = "auto"
-MATHOID_MML_CACHE_TTL = 86400
-MATHOID_CACHE_ROOT = ""
-MATHOID_CACHE_URL = False
-
-TEXOID_GZIP = False
-TEXOID_META_CACHE = "default"
-TEXOID_META_CACHE_TTL = 86400
 DMOJ_NEWSLETTER_ID_ON_REGISTER = None
 
 BAD_MAIL_PROVIDERS = ()
@@ -548,8 +537,8 @@ BLEACH_USER_SAFE_ATTRS = {
 MARKDOWN_STAFF_EDITABLE_STYLE = {
     "safe_mode": False,
     "use_camo": True,
-    "texoid": True,
-    "math": True,
+    
+    
     "bleach": {
         "tags": BLEACH_USER_SAFE_TAGS,
         "attributes": BLEACH_USER_SAFE_ATTRS,
@@ -561,22 +550,22 @@ MARKDOWN_STAFF_EDITABLE_STYLE = {
 MARKDOWN_ADMIN_EDITABLE_STYLE = {
     "safe_mode": False,
     "use_camo": True,
-    "texoid": True,
-    "math": True,
+    
+    
 }
 
 MARKDOWN_DEFAULT_STYLE = {
     "safe_mode": True,
     "nofollow": True,
     "use_camo": True,
-    "math": True,
+    
 }
 
 MARKDOWN_USER_LARGE_STYLE = {
     "safe_mode": True,
     "nofollow": True,
     "use_camo": True,
-    "math": True,
+    
 }
 
 MARKDOWN_STYLES = {

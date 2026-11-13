@@ -1,3 +1,5 @@
+import re
+
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.syndication.views import Feed
@@ -7,6 +9,23 @@ from django.utils.feedgenerator import Atom1Feed
 
 from judge.jinja2.markdown import markdown
 from judge.models import BlogPost, Comment, Problem
+
+
+TEX_REPLACEMENTS = {
+    r'\le': '≤', r'\leq': '≤', r'\ge': '≥', r'\geq': '≥',
+    r'\times': '×', r'\cdot': '·', r'\ldots': '…', r'\dots': '…',
+    r'\rightarrow': '→', r'\to': '→', r'\infty': '∞', r'\pm': '±',
+}
+
+
+def strip_math(text):
+    """Feeds have no MathJax, so render TeX as readable plain text instead."""
+    text = re.sub(r'\$\$(.+?)\$\$', r'\1', text, flags=re.S)
+    text = re.sub(r'(?<!\$)\$(?!\$)([^$\n]+?)(?<!\$)\$(?!\$)', r'\1', text)
+    text = re.sub(r'(?<!~)~([^~\n]+?)~(?!~)', r'\1', text)
+    for tex, replacement in TEX_REPLACEMENTS.items():
+        text = text.replace(tex, replacement)
+    return text
 
 
 class ProblemFeed(Feed):
@@ -24,7 +43,7 @@ class ProblemFeed(Feed):
         key = 'problem_feed:%d' % problem.id
         desc = cache.get(key)
         if desc is None:
-            desc = str(markdown(problem.description, 'problem'))[:500] + '...'
+            desc = str(markdown(strip_math(problem.description), 'problem'))[:500] + '...'
             cache.set(key, desc, 86400)
         return desc
 
@@ -54,7 +73,7 @@ class CommentFeed(Feed):
         key = 'comment_feed:%d' % comment.id
         desc = cache.get(key)
         if desc is None:
-            desc = str(markdown(comment.body, 'comment'))
+            desc = str(markdown(strip_math(comment.body), 'comment'))
             cache.set(key, desc, 86400)
         return desc
 
@@ -84,7 +103,7 @@ class BlogFeed(Feed):
         key = 'blog_feed:%d' % post.id
         summary = cache.get(key)
         if summary is None:
-            summary = str(markdown(post.summary or post.content, 'blog'))
+            summary = str(markdown(strip_math(post.summary or post.content), 'blog'))
             cache.set(key, summary, 86400)
         return summary
 

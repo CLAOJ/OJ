@@ -308,13 +308,7 @@ You will not be able to view your scratch codes after you leave this page!') }}"
                             <td><label class="inline-header grayed">{{ _('Editor theme:') }}</label></td>
                             <td><span class="fullwidth">{{ form.ace_theme }}</span></td>
                         </tr>
-                        {% if has_math_config %}
-                            <tr>
-                                <td><label class="inline-header grayed">{{ _('Math engine:') }}</label></td>
-                                <td><span class="fullwidth">{{ form.math_engine }}</span></td>
-                            </tr>
-                        {% endif %}
-                    </table>
+                        </table>
 
                 </div>
                 {% if form.organizations %}
