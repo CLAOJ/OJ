@@ -16,7 +16,7 @@ def generate_opengraph(cache_key, data, style):
                 description = text
                 break
         if description:
-            for remove in (r'\[', r'\]', r'\(', r'\)'):
+            for remove in (r'\[', r'\]', r'\(', r'\)', '$', '~'):
                 description = description.replace(remove, '')
         img = tree.xpath('.//img')
         metadata = truncatewords(description, 60), img[0].get('src') if img else None

@@ -132,8 +132,8 @@ def math_setting(request):
     else:
         engine = settings.MATHOID_DEFAULT_TYPE
     # markdown2's vnoj-latex extra leaves TeX for MathJax; the server-side
-    # MathML/SVG renderer is gone, so "auto" must use MathJax on every browser.
+    # MathML/SVG renderer is gone, so auto/mml/svg must all use MathJax.
     # Firefox and Safari report MathML support and used to get raw $...$ here.
-    if engine == "auto":
+    if engine in ("auto", "mml", "svg"):
         engine = "jax"
     return {"MATH_ENGINE": engine, "REQUIRE_JAX": engine == "jax", "caniuse": caniuse}
