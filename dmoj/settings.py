@@ -537,8 +537,6 @@ BLEACH_USER_SAFE_ATTRS = {
 MARKDOWN_STAFF_EDITABLE_STYLE = {
     "safe_mode": False,
     "use_camo": True,
-    
-    
     "bleach": {
         "tags": BLEACH_USER_SAFE_TAGS,
         "attributes": BLEACH_USER_SAFE_ATTRS,
@@ -550,22 +548,18 @@ MARKDOWN_STAFF_EDITABLE_STYLE = {
 MARKDOWN_ADMIN_EDITABLE_STYLE = {
     "safe_mode": False,
     "use_camo": True,
-    
-    
 }
 
 MARKDOWN_DEFAULT_STYLE = {
     "safe_mode": True,
     "nofollow": True,
     "use_camo": True,
-    
 }
 
 MARKDOWN_USER_LARGE_STYLE = {
     "safe_mode": True,
     "nofollow": True,
     "use_camo": True,
-    
 }
 
 MARKDOWN_STYLES = {
